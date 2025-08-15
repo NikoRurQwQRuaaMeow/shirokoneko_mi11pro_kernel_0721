@@ -77,7 +77,7 @@ jobs:
       - name: 初始化源码仓库
         run: |
           rm -rf kernel_workspace && mkdir kernel_workspace && cd kernel_workspace
-          git clone --depth=1 https://github.com/Winkmoon/kernel_xiaomi_sm8350-11p -b fourteen common
+          git clone --depth=1 https://github.com/NikoRurQwQRuaaMeow/shirokoneko_mi11pro_kernel_0721.git -b shiroko-mars common
           rm common/android/abi_gki_protected_exports_* || true
           for f in common/scripts/setlocalversion; do
             sed -i 's/ -dirty//g' "$f"
