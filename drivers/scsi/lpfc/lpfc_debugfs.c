@@ -2046,7 +2046,6 @@ lpfc_debugfs_lockstat_write(struct file *file, const char __user *buf,
 	char mybuf[64];
 	char *pbuf;
 	int i;
-	size_t bsize;
 
 	/* Protect copy from user */
 	if (!access_ok(buf, nbytes))
@@ -2054,9 +2053,7 @@ lpfc_debugfs_lockstat_write(struct file *file, const char __user *buf,
 
 	memset(mybuf, 0, sizeof(mybuf));
 
-	bsize = min(nbytes, (sizeof(mybuf) - 1));
-
-	if (copy_from_user(mybuf, buf, bsize))
+	if (copy_from_user(mybuf, buf, nbytes))
 		return -EFAULT;
 	pbuf = &mybuf[0];
 
@@ -2077,7 +2074,7 @@ lpfc_debugfs_lockstat_write(struct file *file, const char __user *buf,
 			qp->lock_conflict.wq_access = 0;
 		}
 	}
-	return bsize;
+	return nbytes;
 }
 #endif
 

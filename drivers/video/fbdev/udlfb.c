@@ -27,8 +27,6 @@
 #include <video/udlfb.h>
 #include "edid.h"
 
-#define OUT_EP_NUM	1	/* The endpoint number we will use */
-
 static const struct fb_fix_screeninfo dlfb_fix = {
 	.id =           "udlfb",
 	.type =         FB_TYPE_PACKED_PIXELS,
@@ -1654,7 +1652,7 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 	struct fb_info *info;
 	int retval;
 	struct usb_device *usbdev = interface_to_usbdev(intf);
-	static u8 out_ep[] = {OUT_EP_NUM + USB_DIR_OUT, 0};
+	struct usb_endpoint_descriptor *out;
 
 	/* usb initialization */
 	dlfb = kzalloc(sizeof(*dlfb), GFP_KERNEL);
@@ -1668,9 +1666,9 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 	dlfb->udev = usb_get_dev(usbdev);
 	usb_set_intfdata(intf, dlfb);
 
-	if (!usb_check_bulk_endpoints(intf, out_ep)) {
-		dev_err(&intf->dev, "Invalid DisplayLink device!\n");
-		retval = -EINVAL;
+	retval = usb_find_common_endpoints(intf->cur_altsetting, NULL, &out, NULL, NULL);
+	if (retval) {
+		dev_err(&intf->dev, "Device should have at lease 1 bulk endpoint!\n");
 		goto error;
 	}
 
@@ -1929,8 +1927,7 @@ retry:
 		}
 
 		/* urb->transfer_buffer_length set to actual before submit */
-		usb_fill_bulk_urb(urb, dlfb->udev,
-			usb_sndbulkpipe(dlfb->udev, OUT_EP_NUM),
+		usb_fill_bulk_urb(urb, dlfb->udev, usb_sndbulkpipe(dlfb->udev, 1),
 			buf, size, dlfb_urb_completion, unode);
 		urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 

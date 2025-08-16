@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 
@@ -573,14 +574,14 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 	{
 		.playback = {
 			.stream_name = "ULTRAOUND_HOSTLESS Playback",
-#if defined (CONFIG_TARGET_PRODUCT_CETUS)
+#if defined (CONFIG_TARGET_PRODUCT_CETUS) || defined(CONFIG_TARGET_PRODUCT_ARGO)
 			.aif_name = "RX1_CDC_DMA_DL_US",
 #elif defined (CONFIG_TARGET_PRODUCT_RENOIR)
 			.aif_name = "TERT_MI2S_DL_HL",
 #elif defined(CONFIG_TARGET_PRODUCT_LISA) || defined(CONFIG_TARGET_PRODUCT_MONA) || defined(CONFIG_TARGET_PRODUCT_ZIJIN)
 			.aif_name = "PRI_TDM_RX_1_DL_US",
 #elif defined(CONFIG_TARGET_PRODUCT_TAOYAO)
-			.aif_name = "PRI_MI2S_DL_HL",
+			.aif_name = "PRI_MI2S_DL_HL",		
 #else
 			.aif_name = "TERT_TDM_RX_1_DL_US",
 #endif

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -146,12 +147,10 @@ static int wcd_measure_adc_once(struct wcd_mbhc *mbhc, int mux_ctl)
 	 * enable and disable it after FSM enable
 	 */
 	if (mbhc->mbhc_cb->mbhc_comp_autozero_control)
-		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc,
-							true);
+		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc, true);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
 	if (mbhc->mbhc_cb->mbhc_comp_autozero_control)
-		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc,
-							false);
+		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc,	false);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ADC_EN, 1);
 
 	while (retry--) {
@@ -377,13 +376,10 @@ done:
 	 * enable and disable it after FSM enable
 	 */
 	if (mbhc->mbhc_cb->mbhc_comp_autozero_control)
-		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc,
-							true);
+		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc, true);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
 	if (mbhc->mbhc_cb->mbhc_comp_autozero_control)
-		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc,
-							false);
-
+		mbhc->mbhc_cb->mbhc_comp_autozero_control(mbhc, false);
 	/* Restore ADC Enable */
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ADC_EN, adc_en);
 

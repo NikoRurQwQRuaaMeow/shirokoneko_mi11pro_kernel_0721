@@ -534,7 +534,6 @@ struct dwc3_msm {
 	bool			dual_port;
 
 	bool			perf_mode;
-	bool			usb_data_enabled;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -2618,12 +2617,16 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc,
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_NOTIFY_CLEAR_DB\n");
 		if (mdwc->gsi_reg) {
 			dwc3_msm_write_reg_field(mdwc->base,
-				GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
-				BLOCK_GSI_WR_GO_MASK, true);
+			GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
+			BLOCK_GSI_WR_GO_MASK, true);
 			dwc3_msm_write_reg_field(mdwc->base,
-				GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
-				GSI_EN_MASK, 0);
+			GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
+			GSI_EN_MASK, 0);
 		}
+		break;
+	case DWC3_USB_RESTART_EVENT:
+		dev_dbg(mdwc->dev, "DWC3_USB_RESTART_EVENT\n");
+		schedule_work(&mdwc->restart_usb_work);
 		break;
 	default:
 		dev_dbg(mdwc->dev, "unknown dwc3 event\n");
@@ -3350,6 +3353,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 	/* make sure above writes are completed before turning off clocks */
 	wmb();
 
+	atomic_set(&dwc->in_lpm, 1);
+
 	/* Disable clocks */
 	clk_disable_unprepare(mdwc->bus_aggr_clk);
 	clk_disable_unprepare(mdwc->utmi_clk);
@@ -3401,7 +3406,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 		}
 	}
 
-	atomic_set(&dwc->in_lpm, 1);
 
 	/*
 	 * with the core in power collapse, we dont require wakeup
@@ -3880,7 +3884,7 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		update_marker("M - USB device resume started");
+		place_marker("M - USB device resume started");
 #endif
 	}
 
@@ -4033,9 +4037,6 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 	if (!edev || !mdwc)
 		return NOTIFY_DONE;
 
-	if (!mdwc->usb_data_enabled)
-		return NOTIFY_DONE;
-
 	dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
@@ -4089,14 +4090,6 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 
 	if (!edev || !mdwc)
 		return NOTIFY_DONE;
-
-	if (!mdwc->usb_data_enabled) {
-		if (event)
-			dwc3_msm_gadget_vbus_draw(mdwc, 500);
-		else
-			dwc3_msm_gadget_vbus_draw(mdwc, 0);
-		return NOTIFY_DONE;
-	}
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
 
@@ -4266,6 +4259,7 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	 * previous role value to allow resetting USB controller and
 	 * PHYs.
 	 */
+
 	if (mdwc->drd_state != DRD_STATE_UNDEFINED && cur_role == role) {
 		dbg_log_string("no USB role change");
 		return 0;
@@ -4595,7 +4589,7 @@ static void dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 	if (start)
 		dbg_log_string("host mode started");
 	else
@@ -4619,7 +4613,7 @@ static void dwc3_start_stop_device(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 	if (start)
 		dbg_log_string("device mode restarted");
 	else
@@ -4655,7 +4649,7 @@ int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode)
 	dbg_event(0xFF, "ss_lane_release", 0);
 	/* flush any pending work */
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 
 	redriver_release_usb_lanes(mdwc->ss_redriver_node);
 
@@ -4680,34 +4674,6 @@ int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode)
 	return 0;
 }
 EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
-
-static ssize_t usb_data_enabled_show(struct device *dev,
-				     struct device_attribute *attr, char *buf)
-{
-	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
-
-	return sysfs_emit(buf, "%s\n",
-			  mdwc->usb_data_enabled ? "enabled" : "disabled");
-}
-
-static ssize_t usb_data_enabled_store(struct device *dev,
-				      struct device_attribute *attr,
-				      const char *buf, size_t count)
-{
-	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
-
-	if (kstrtobool(buf, &mdwc->usb_data_enabled))
-		return -EINVAL;
-
-	if (!mdwc->usb_data_enabled) {
-		mdwc->vbus_active = false;
-		mdwc->id_state = DWC3_ID_FLOAT;
-		dwc3_ext_event_notify(mdwc);
-	}
-
-	return count;
-}
-static DEVICE_ATTR_RW(usb_data_enabled);
 
 static int dwc3_msm_probe(struct platform_device *pdev)
 {
@@ -5047,9 +5013,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->ss_redriver_node = of_parse_phandle(node, "ssusb_redriver", 0);
 
-	/* set the initial value */
-	mdwc->usb_data_enabled = true;
-
 	if (of_property_read_bool(node, "usb-role-switch")) {
 		role_desc.fwnode = dev_fwnode(&pdev->dev);
 		mdwc->role_switch = usb_role_switch_register(mdwc->dev,
@@ -5136,7 +5099,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	device_create_file(&pdev->dev, &dev_attr_mode);
 	device_create_file(&pdev->dev, &dev_attr_speed);
 	device_create_file(&pdev->dev, &dev_attr_bus_vote);
-	device_create_file(&pdev->dev, &dev_attr_usb_data_enabled);
 
 	return 0;
 
@@ -5165,7 +5127,6 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	device_remove_file(&pdev->dev, &dev_attr_mode);
 	device_remove_file(&pdev->dev, &dev_attr_speed);
 	device_remove_file(&pdev->dev, &dev_attr_bus_vote);
-	device_remove_file(&pdev->dev, &dev_attr_usb_data_enabled);
 
 	if (mdwc->dpdm_nb.notifier_call) {
 		regulator_unregister_notifier(mdwc->dpdm_reg, &mdwc->dpdm_nb);
@@ -5842,8 +5803,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			mdwc->drd_state = DRD_STATE_PERIPHERAL;
 			work = true;
 		} else {
-			if (mdwc->usb_data_enabled)
-				dwc3_msm_gadget_vbus_draw(mdwc, 0);
+			dwc3_msm_gadget_vbus_draw(mdwc, 0);
 			dev_dbg(mdwc->dev, "Cable disconnected\n");
 		}
 		break;
@@ -6007,7 +5967,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 			mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		update_marker("M - USB device resume started");
+		place_marker("M - USB device resume started");
 #endif
 	}
 
@@ -6178,6 +6138,7 @@ static struct platform_driver dwc3_msm_driver = {
 		.name	= "msm-dwc3",
 		.pm	= &dwc3_msm_dev_pm_ops,
 		.of_match_table	= of_dwc3_matach,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

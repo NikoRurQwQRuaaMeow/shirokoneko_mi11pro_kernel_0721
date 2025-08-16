@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -237,18 +236,6 @@ static void ipa_pci_io_resume(struct pci_dev *pci_dev)
 {
 }
 
-#ifndef CONFIG_PCI
-static inline void pci_release_region(struct pci_dev *pci_dev, int bar)
-{
-}
-
-static inline int pci_request_region(struct pci_dev *pci_dev, int bar,
-				     const char *res_name)
-{
-	return -EINVAL;
-}
-#endif
-
 /* PCI Error Recovery */
 static const struct pci_error_handlers ipa_pci_err_handler = {
 	.error_detected = ipa_pci_io_error_detected,
@@ -468,7 +455,7 @@ EXPORT_SYMBOL(ipa_smmu_free_sgt);
 
 static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 {
-	IPADBG("Entry\n");
+	IPAERR("Entry\n");
 	switch (event) {
 		case PM_POST_SUSPEND:
 #ifdef CONFIG_DEEPSLEEP
@@ -480,7 +467,7 @@ static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 #endif
 			break;
 	}
-	IPADBG("Exit\n");
+	IPAERR("Exit\n");
 	return NOTIFY_DONE;
 }
 
@@ -2047,7 +2034,7 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int retval = 0;
 	u32 pyld_sz;
-	u8 header[512] = { 0 };
+	u8 header[128] = { 0 };
 	u8 *param = NULL;
 	bool is_vlan_mode;
 	struct ipa_ioc_nat_alloc_mem nat_mem;
@@ -3687,6 +3674,7 @@ static void ipa3_halt_q6_gsi_channels(bool prod)
 				gsi_ep_cfg->ipa_gsi_chan_num,
 				gsi_ep_cfg->ee,
 				code);
+				ipa_assert();
 			}
 		}
 	}
@@ -7607,8 +7595,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	atomic_set(&ipa3_ctx->ipa3_active_clients.cnt, 1);
 
 	/* Create workqueues for power management */
-	ipa3_ctx->power_mgmt_wq = alloc_workqueue("ipa_power_mgmt",
-			WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_SYSFS | WQ_HIGHPRI, 1);
+	ipa3_ctx->power_mgmt_wq =
+		create_singlethread_workqueue("ipa_power_mgmt");
 	if (!ipa3_ctx->power_mgmt_wq) {
 		IPAERR("failed to create power mgmt wq\n");
 		result = -ENOMEM;

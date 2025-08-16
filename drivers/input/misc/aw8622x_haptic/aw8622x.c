@@ -122,7 +122,7 @@ static char aw8622x_rtp_name[][AW8622X_RTP_NAME_MAX] = {
 	{"NFC_card_rtp.bin"},
 	{"wakeup_voice_assistant_rtp.bin"},
 	{"NFC_card_slow_rtp.bin"},
-	{"POCO_RTP.bin"},	//99
+	{"aw8622x_rtp.bin"},	//99
 	{"aw8622x_rtp.bin"},	//100
 	{"offline_countdown_RTP.bin"},
 	{"scene_bomb_injury_RTP.bin"},
@@ -359,7 +359,7 @@ int aw8622x_parse_dt(struct device *dev, struct aw8622x *aw8622x,
 	unsigned int val = 0;
 	unsigned int prctmode_temp[3];
 	unsigned int sine_array_temp[4];
-	unsigned int rtp_time[194];
+	unsigned int rtp_time[175];
 	struct qti_hap_config *config = &aw8622x->config;
 	struct device_node *child_node;
 	struct qti_hap_effect *effect;
@@ -1765,7 +1765,6 @@ static void aw8622x_ram_loaded(const struct firmware *cont, void *context)
 		aw_dev_err(aw8622x->dev,
 			"%s: check sum err: check_sum=0x%04x\n", __func__,
 			check_sum);
-		release_firmware(cont);
 		return;
 	} else {
 		aw_dev_err(aw8622x->dev, "%s: check sum pass: 0x%04x\n",
@@ -4146,9 +4145,9 @@ int aw8622x_haptics_upload_effect (struct input_dev *dev,
 			     __func__, aw8622x->effect_id,
 			     aw8622x->activate_mode);
 			data[1] = aw8622x->dts_info.rtp_time[aw8622x->effect_id] / 1000;	/*second data */
-			data[2] = aw8622x->dts_info.rtp_time[aw8622x->effect_id] % 1000;	/*millisecond data */
-			pr_debug("%s: data[1] = %d data[2] = %d, rtp_time %d\n", __func__,
-				 data[1], data[2], aw8622x->dts_info.rtp_time[aw8622x->effect_id]);
+			data[2] = aw8622x->dts_info.rtp_time[aw8622x->effect_id];	/*millisecond data */
+			pr_debug("%s: data[1] = %d data[2] = %d\n", __func__,
+				 data[1], data[2]);
 		}
 
 		if (copy_to_user(effect->u.periodic.custom_data, data,

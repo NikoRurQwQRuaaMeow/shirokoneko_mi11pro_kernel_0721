@@ -54,7 +54,14 @@ __acquires(bitmap->lock)
 {
 	unsigned char *mappage;
 
-	WARN_ON_ONCE(page >= bitmap->pages);
+	if (page >= bitmap->pages) {
+		/* This can happen if bitmap_start_sync goes beyond
+		 * End-of-device while looking for a whole page.
+		 * It is harmless.
+		 */
+		return -EINVAL;
+	}
+
 	if (bitmap->bp[page].hijacked) /* it's hijacked, don't try to alloc */
 		return 0;
 
@@ -357,7 +364,7 @@ static int read_page(struct file *file, unsigned long index,
 	int ret = 0;
 	struct inode *inode = file_inode(file);
 	struct buffer_head *bh;
-	sector_t block;
+	sector_t block, blk_cur;
 
 	pr_debug("read bitmap file (%dB @ %llu)\n", (int)PAGE_SIZE,
 		 (unsigned long long)index << PAGE_SHIFT);
@@ -368,17 +375,21 @@ static int read_page(struct file *file, unsigned long index,
 		goto out;
 	}
 	attach_page_buffers(page, bh);
-	block = index << (PAGE_SHIFT - inode->i_blkbits);
+	blk_cur = index << (PAGE_SHIFT - inode->i_blkbits);
 	while (bh) {
+		block = blk_cur;
+
 		if (count == 0)
 			bh->b_blocknr = 0;
 		else {
-			bh->b_blocknr = bmap(inode, block);
-			if (bh->b_blocknr == 0) {
-				/* Cannot use this file! */
+			ret = bmap(inode, &block);
+			if (ret || !block) {
 				ret = -EINVAL;
+				bh->b_blocknr = 0;
 				goto out;
 			}
+
+			bh->b_blocknr = block;
 			bh->b_bdev = inode->i_sb->s_bdev;
 			if (count < (1<<inode->i_blkbits))
 				count = 0;
@@ -392,7 +403,7 @@ static int read_page(struct file *file, unsigned long index,
 			set_buffer_mapped(bh);
 			submit_bh(REQ_OP_READ, 0, bh);
 		}
-		block++;
+		blk_cur++;
 		bh = bh->b_this_page;
 	}
 	page->index = index;
@@ -1362,14 +1373,6 @@ __acquires(bitmap->lock)
 	sector_t csize;
 	int err;
 
-	if (page >= bitmap->pages) {
-		/*
-		 * This can happen if bitmap_start_sync goes beyond
-		 * End-of-device while looking for a whole page or
-		 * user set a huge number to sysfs bitmap_set_bits.
-		 */
-		return NULL;
-	}
 	err = md_bitmap_checkpage(bitmap, page, create, 0);
 
 	if (bitmap->bp[page].hijacked ||
@@ -2480,35 +2483,11 @@ backlog_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	unsigned long backlog;
 	unsigned long old_mwb = mddev->bitmap_info.max_write_behind;
-	struct md_rdev *rdev;
-	bool has_write_mostly = false;
 	int rv = kstrtoul(buf, 10, &backlog);
 	if (rv)
 		return rv;
 	if (backlog > COUNTER_MAX)
 		return -EINVAL;
-
-	rv = mddev_lock(mddev);
-	if (rv)
-		return rv;
-
-	/*
-	 * Without write mostly device, it doesn't make sense to set
-	 * backlog for max_write_behind.
-	 */
-	rdev_for_each(rdev, mddev) {
-		if (test_bit(WriteMostly, &rdev->flags)) {
-			has_write_mostly = true;
-			break;
-		}
-	}
-	if (!has_write_mostly) {
-		pr_warn_ratelimited("%s: can't set backlog, no write mostly device available\n",
-				    mdname(mddev));
-		mddev_unlock(mddev);
-		return -EINVAL;
-	}
-
 	mddev->bitmap_info.max_write_behind = backlog;
 	if (!backlog && mddev->wb_info_pool) {
 		/* wb_info_pool is not needed if backlog is zero */
@@ -2523,8 +2502,6 @@ backlog_store(struct mddev *mddev, const char *buf, size_t len)
 	}
 	if (old_mwb != backlog)
 		md_bitmap_update_sb(mddev->bitmap);
-
-	mddev_unlock(mddev);
 	return len;
 }
 

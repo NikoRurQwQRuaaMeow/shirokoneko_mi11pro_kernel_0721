@@ -400,6 +400,7 @@ int usb_function_deactivate(struct usb_function *function)
 		status = usb_gadget_deactivate(cdev->gadget);
 		spin_lock_irqsave(&cdev->lock, flags);
 	}
+
 	if (status == 0)
 		cdev->deactivations++;
 
@@ -893,7 +894,7 @@ static int set_config(struct usb_composite_dev *cdev,
 		goto done;
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	update_marker("M - USB device is enumerated");
+	place_marker("M - USB Device is enumerated");
 #endif
 	usb_gadget_set_state(gadget, USB_STATE_CONFIGURED);
 	cdev->config = c;
@@ -2130,7 +2131,7 @@ void composite_disconnect(struct usb_gadget *gadget)
 
 	if (cdev == NULL) {
 		WARN(1, "%s: Calling disconnect on a Gadget that is \
-			 not connected\n", __func__);
+			not connected\n", __func__);
 		return;
 	}
 
@@ -2436,7 +2437,7 @@ void composite_resume(struct usb_gadget *gadget)
 	 */
 	INFO(cdev, "USB Resume end\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	update_marker("M - USB device is resumed");
+	place_marker("M - USB Device is resumed");
 #endif
 	if (cdev->driver->resume)
 		cdev->driver->resume(cdev);

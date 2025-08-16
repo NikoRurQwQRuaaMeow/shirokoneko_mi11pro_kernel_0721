@@ -3,6 +3,7 @@
  * cs35l45-tables.c -- CS35L45 ALSA SoC audio driver
  *
  * Copyright 2019 Cirrus Logic, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Author: James Schulman <james.schulman@cirrus.com>
  *

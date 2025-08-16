@@ -3299,10 +3299,13 @@ static long btrfs_ioctl_dev_info(struct btrfs_fs_info *fs_info,
 	di_args->bytes_used = btrfs_device_get_bytes_used(dev);
 	di_args->total_bytes = btrfs_device_get_total_bytes(dev);
 	memcpy(di_args->uuid, dev->uuid, sizeof(di_args->uuid));
-	if (dev->name)
-		strscpy(di_args->path, rcu_str_deref(dev->name), sizeof(di_args->path));
-	else
+	if (dev->name) {
+		strncpy(di_args->path, rcu_str_deref(dev->name),
+				sizeof(di_args->path) - 1);
+		di_args->path[sizeof(di_args->path) - 1] = 0;
+	} else {
 		di_args->path[0] = '\0';
+	}
 
 out:
 	rcu_read_unlock();
@@ -4143,7 +4146,7 @@ static void get_block_group_info(struct list_head *groups_list,
 static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 				   void __user *arg)
 {
-	struct btrfs_ioctl_space_args space_args = { 0 };
+	struct btrfs_ioctl_space_args space_args;
 	struct btrfs_ioctl_space_info space;
 	struct btrfs_ioctl_space_info *dest;
 	struct btrfs_ioctl_space_info *dest_orig;
@@ -4338,11 +4341,6 @@ static long btrfs_ioctl_scrub(struct file *file, void __user *arg)
 	sa = memdup_user(arg, sizeof(*sa));
 	if (IS_ERR(sa))
 		return PTR_ERR(sa);
-
-	if (sa->flags & ~BTRFS_SCRUB_SUPPORTED_FLAGS) {
-		ret = -EOPNOTSUPP;
-		goto out;
-	}
 
 	if (!(sa->flags & BTRFS_SCRUB_READONLY)) {
 		ret = mnt_want_write_file(file);
@@ -4917,9 +4915,7 @@ static long btrfs_ioctl_qgroup_assign(struct file *file, void __user *arg)
 	}
 
 	/* update qgroup status and info */
-	mutex_lock(&fs_info->qgroup_ioctl_lock);
 	err = btrfs_run_qgroups(trans);
-	mutex_unlock(&fs_info->qgroup_ioctl_lock);
 	if (err < 0)
 		btrfs_handle_fs_error(fs_info, err,
 				      "failed to update qgroup status and info");
@@ -5515,7 +5511,7 @@ static int _btrfs_ioctl_send(struct file *file, void __user *argp, bool compat)
 
 	if (compat) {
 #if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
-		struct btrfs_ioctl_send_args_32 args32 = { 0 };
+		struct btrfs_ioctl_send_args_32 args32;
 
 		ret = copy_from_user(&args32, argp, sizeof(args32));
 		if (ret)

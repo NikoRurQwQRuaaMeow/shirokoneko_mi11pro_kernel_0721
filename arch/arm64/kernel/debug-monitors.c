@@ -53,7 +53,7 @@ NOKPROBE_SYMBOL(mdscr_read);
  * Allow root to disable self-hosted debug from userspace.
  * This is useful if you want to connect an external JTAG debugger.
  */
-static bool debug_enabled = true;
+static bool debug_enabled;
 
 static int create_debug_debugfs_entry(void)
 {
@@ -440,11 +440,6 @@ int kernel_active_single_step(void)
 	return mdscr_read() & DBG_MDSCR_SS;
 }
 NOKPROBE_SYMBOL(kernel_active_single_step);
-
-void kernel_rewind_single_step(struct pt_regs *regs)
-{
-	set_regs_spsr_ss(regs);
-}
 
 /* ptrace API */
 void user_enable_single_step(struct task_struct *task)

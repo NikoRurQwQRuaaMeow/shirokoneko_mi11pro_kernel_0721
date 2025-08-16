@@ -418,65 +418,73 @@ config QTI_BATTERY_CHARGER
 	  To compile the driver as a module, choose M here: the module will be
 	  called qti_battery_charger.
 
-config BQ2597X
-	bool "BQ2597X charger"
-	depends on QTI_BATTERY_CHARGER
+config QTI_BATTERY_CHARGER_ODIN
+	tristate "QTI Glink battery charger"
+	depends on QTI_PMIC_GLINK && EXTCON
 	help
-	  Say Y here to enable BQ2597X charger
+	  Say Y here to enable Qualcomm Technologies, Inc. battery charger
+	  driver which interfaces with the charger firmware running on the
+	  remote subsystem (e.g. DSP) by communicating over PMIC Glink channel
+	  and provides information about the battery, USB and wireless charging
+	  by exposing them as power supply devices.
 
-config BQ_FG_1S
-	bool "BQ 1S battery cell config"
-	depends on QTI_BATTERY_CHARGER
+	  To compile the driver as a module, choose M here: the module will be
+	  called qti_battery_charger.
+
+config QTI_BATTERY_CHARGER_VENUS
+	tristate "QTI Glink battery charger"
+	depends on QTI_PMIC_GLINK && EXTCON
 	help
-	  Say Y here to enable BQ 1S battery cell
+	  Say Y here to enable Qualcomm Technologies, Inc. battery charger
+	  driver which interfaces with the charger firmware running on the
+	  remote subsystem (e.g. DSP) by communicating over PMIC Glink channel
+	  and provides information about the battery, USB and wireless charging
+	  by exposing them as power supply devices.
+
+	  To compile the driver as a module, choose M here: the module will be
+	  called qti_battery_charger.
+
+config DUAL_FUEL_GAUGE
+	tristate "Dual fuel gauge debug"
+	depends on QTI_PMIC_GLINK
+	help
+	  Say Y here to enable debugging dual fuel gauge debugging
 
 config BQ_FUEL_GAUGE
-	bool "BQ fuel gauge config"
-	depends on QTI_BATTERY_CHARGER
+	tristate "BQ fuel gauge config"
+	depends on QTI_PMIC_GLINK
 	help
-	  Say Y here to enable BQ fuel gauge
+	  Say Y here to enable Bq fuel gauge
 
 config BQ_CLOUD_AUTHENTICATION
-	bool "BQ cloud thentication config"
-	depends on QTI_BATTERY_CHARGER
+	tristate "BQ cloud thentication config"
+	depends on QTI_PMIC_GLINK
 	help
 	  Say Y here to enable Bq cloud thentication
 
-config DUAL_FUEL_GAUGE
-	bool "Dual fuel gauge"
-	depends on QTI_BATTERY_CHARGER
-	help
-	  Say Y here to enable dual fuel gauge
-
-config MI_WIRELESS
-	bool "mi wireless config"
-	depends on QTI_BATTERY_CHARGER
-	help
-	  Say Y here to enable mi wireless
-
-config AI_RSOC_M20
-	bool "get average current and RSOC config"
-	depends on QTI_BATTERY_CHARGER
+config AI_RSOC_L9
+	tristate "get average current and RSOC config"
+	depends on QTI_PMIC_GLINK
 	help
 	  Say Y here to enable create node to get average current and RSOC
 
-config RENOIR_FOR_BUILD
-	bool "renoir build debug"
-	depends on QTI_BATTERY_CHARGER
+config BQ2597X
+	tristate "BQ2597X charger"
+	depends on QTI_PMIC_GLINK
 	help
-	  Say Y here to enable renoir build debug
+	  Say Y here to enable debugging dual fuel gauge debugging
 
-config REDWOOD_FOR_BUILD
-        bool "redwood build debug"
-        depends on QTI_BATTERY_CHARGER
-        help
-          Say Y here to enable redwood build debug
-
-config VENUS_FOR_BUILD
-	bool "venus build debug"
-	depends on QTI_BATTERY_CHARGER
+config MI_WIRELESS
+	tristate "mi wirless config"
+	depends on QTI_PMIC_GLINK
 	help
-	  Say Y here to enable venus build debug
+	  Say Y here to enable mi wireless
+
+config BQ_FG_1S
+	tristate "BQ 1S battery cell config"
+	depends on QTI_PMIC_GLINK
+	help
+	  Say Y here to enable Bq fuel gauge
 
 config CHARGER_88PM860X
 	tristate "Marvell 88PM860x Charger driver"
@@ -783,6 +791,12 @@ config CHARGER_WILCO
 	  by the Embedded Controller on the Chromebook named Wilco. Further
 	  information can be found in
 	  Documentation/ABI/testing/sysfs-class-power-wilco
+
+config RENOIR_FOR_BUILD
+	tristate "renoir build debug"
+	depends on QTI_PMIC_GLINK
+	help
+	  Say Y here to enable renoir build debug
 
 source "drivers/power/supply/qcom/Kconfig"
 

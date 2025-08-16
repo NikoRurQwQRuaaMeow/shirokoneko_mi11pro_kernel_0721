@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 /*
  * Add support for 24 and 32bit format for ASM loopback and playback session.
@@ -753,6 +754,7 @@ struct msm_pcm_stream_app_type_cfg {
 	uint32_t copp_token;
 	int bit_width;
 	int copp_perf_mode;
+	int channel;
 };
 
 struct msm_pcm_channel_mixer_v2 {
@@ -898,7 +900,4 @@ int snd_pcm_add_usr_ctls(struct snd_pcm *pcm, int stream,
     unsigned long private_value,
     struct snd_pcm_usr **info_ret);
 #endif
-
-bool msm_pcm_routing_get_portid_copp_idx(int fe_id,
-	int session_type, int *port_id, int *copp_idx);
 #endif /*_MSM_PCM_H*/

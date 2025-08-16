@@ -440,13 +440,6 @@ config UNIPHIER_THERMAL
 	  thermal framework. The driver supports CPU thermal zone temperature
 	  reporting and a couple of trip points.
 
-config SPRD_THERMAL
-	tristate "Temperature sensor on Spreadtrum SoCs"
-	depends on ARCH_SPRD || COMPILE_TEST
-	help
-	  Support for the Spreadtrum thermal sensor driver in the Linux thermal
-	  framework.
-
 config MI_THERMAL_INTERFACE
 	tristate "xiaomi thermal control interface"
 	depends on THERMAL && QGKI
@@ -454,4 +447,10 @@ config MI_THERMAL_INTERFACE
 	help
 	  This is xiaomi thermal control interface.
 
+config SPRD_THERMAL
+	tristate "Temperature sensor on Spreadtrum SoCs"
+	depends on ARCH_SPRD || COMPILE_TEST
+	help
+	  Support for the Spreadtrum thermal sensor driver in the Linux thermal
+	  framework.
 endif

@@ -1941,11 +1941,9 @@ void tracing_reset_online_cpus(struct trace_buffer *buf)
 }
 
 /* Must have trace_types_lock held */
-void tracing_reset_all_online_cpus_unlocked(void)
+void tracing_reset_all_online_cpus(void)
 {
 	struct trace_array *tr;
-
-	lockdep_assert_held(&trace_types_lock);
 
 	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
 		if (!tr->clear_trace)
@@ -1956,13 +1954,6 @@ void tracing_reset_all_online_cpus_unlocked(void)
 		tracing_reset_online_cpus(&tr->max_buffer);
 #endif
 	}
-}
-
-void tracing_reset_all_online_cpus(void)
-{
-	mutex_lock(&trace_types_lock);
-	tracing_reset_all_online_cpus_unlocked();
-	mutex_unlock(&trace_types_lock);
 }
 
 /*
@@ -3521,15 +3512,8 @@ static void *s_start(struct seq_file *m, loff_t *pos)
 	 * will point to the same string as current_trace->name.
 	 */
 	mutex_lock(&trace_types_lock);
-	if (unlikely(tr->current_trace && iter->trace->name != tr->current_trace->name)) {
-		/* Close iter->trace before switching to the new current tracer */
-		if (iter->trace->close)
-			iter->trace->close(iter);
+	if (unlikely(tr->current_trace && iter->trace->name != tr->current_trace->name))
 		*iter->trace = *tr->current_trace;
-		/* Reopen the new current tracer */
-		if (iter->trace->open)
-			iter->trace->open(iter);
-	}
 	mutex_unlock(&trace_types_lock);
 
 #ifdef CONFIG_TRACER_MAX_TRACE
@@ -4262,33 +4246,6 @@ int tracing_open_generic_tr(struct inode *inode, struct file *filp)
 		return ret;
 
 	filp->private_data = inode->i_private;
-
-	return 0;
-}
-
-/*
- * The private pointer of the inode is the trace_event_file.
- * Update the tr ref count associated to it.
- */
-int tracing_open_file_tr(struct inode *inode, struct file *filp)
-{
-	struct trace_event_file *file = inode->i_private;
-	int ret;
-
-	ret = tracing_check_open_get_tr(file->tr);
-	if (ret)
-		return ret;
-
-	filp->private_data = inode->i_private;
-
-	return 0;
-}
-
-int tracing_release_file_tr(struct inode *inode, struct file *filp)
-{
-	struct trace_event_file *file = inode->i_private;
-
-	trace_array_put(file->tr);
 
 	return 0;
 }
@@ -6843,11 +6800,6 @@ out:
 	return ret;
 }
 
-static void tracing_swap_cpu_buffer(void *tr)
-{
-	update_max_tr_single((struct trace_array *)tr, current, smp_processor_id());
-}
-
 static ssize_t
 tracing_snapshot_write(struct file *filp, const char __user *ubuf, size_t cnt,
 		       loff_t *ppos)
@@ -6906,15 +6858,13 @@ tracing_snapshot_write(struct file *filp, const char __user *ubuf, size_t cnt,
 			ret = tracing_alloc_snapshot_instance(tr);
 		if (ret < 0)
 			break;
+		local_irq_disable();
 		/* Now, we're going to swap */
-		if (iter->cpu_file == RING_BUFFER_ALL_CPUS) {
-			local_irq_disable();
+		if (iter->cpu_file == RING_BUFFER_ALL_CPUS)
 			update_max_tr(tr, current, smp_processor_id(), NULL);
-			local_irq_enable();
-		} else {
-			smp_call_function_single(iter->cpu_file, tracing_swap_cpu_buffer,
-						 (void *)tr, 1);
-		}
+		else
+			update_max_tr_single(tr, current, iter->cpu_file);
+		local_irq_enable();
 		break;
 	default:
 		if (tr->allocated_snapshot) {
@@ -7003,11 +6953,10 @@ static const struct file_operations tracing_max_lat_fops = {
 #endif
 
 static const struct file_operations set_tracer_fops = {
-	.open		= tracing_open_generic_tr,
+	.open		= tracing_open_generic,
 	.read		= tracing_set_trace_read,
 	.write		= tracing_set_trace_write,
 	.llseek		= generic_file_llseek,
-	.release	= tracing_release_generic_tr,
 };
 
 static const struct file_operations tracing_pipe_fops = {
@@ -7330,7 +7279,7 @@ static const struct file_operations tracing_err_log_fops = {
 	.open           = tracing_err_log_open,
 	.write		= tracing_err_log_write,
 	.read           = seq_read,
-	.llseek         = tracing_lseek,
+	.llseek         = seq_lseek,
 	.release        = tracing_err_log_release,
 };
 
@@ -7729,23 +7678,14 @@ static ssize_t
 tracing_read_dyn_info(struct file *filp, char __user *ubuf,
 		  size_t cnt, loff_t *ppos)
 {
-	ssize_t ret;
-	char *buf;
+	unsigned long *p = filp->private_data;
+	char buf[64]; /* Not too big for a shallow stack */
 	int r;
 
-	/* 256 should be plenty to hold the amount needed */
-	buf = kmalloc(256, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
+	r = scnprintf(buf, 63, "%ld", *p);
+	buf[r++] = '\n';
 
-	r = scnprintf(buf, 256, "%ld pages:%ld groups: %ld\n",
-		      ftrace_update_tot_cnt,
-		      ftrace_number_of_pages,
-		      ftrace_number_of_groups);
-
-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
-	kfree(buf);
-	return ret;
+	return simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
 }
 
 static const struct file_operations tracing_dyn_info_fops = {
@@ -8048,33 +7988,12 @@ trace_options_write(struct file *filp, const char __user *ubuf, size_t cnt,
 	return cnt;
 }
 
-static int tracing_open_options(struct inode *inode, struct file *filp)
-{
-	struct trace_option_dentry *topt = inode->i_private;
-	int ret;
-
-	ret = tracing_check_open_get_tr(topt->tr);
-	if (ret)
-		return ret;
-
-	filp->private_data = inode->i_private;
-	return 0;
-}
-
-static int tracing_release_options(struct inode *inode, struct file *file)
-{
-	struct trace_option_dentry *topt = file->private_data;
-
-	trace_array_put(topt->tr);
-	return 0;
-}
 
 static const struct file_operations trace_options_fops = {
-	.open = tracing_open_options,
+	.open = tracing_open_generic,
 	.read = trace_options_read,
 	.write = trace_options_write,
 	.llseek	= generic_file_llseek,
-	.release = tracing_release_options,
 };
 
 /*
@@ -8404,6 +8323,9 @@ buffer_percent_write(struct file *filp, const char __user *ubuf,
 	if (val > 100)
 		return -EINVAL;
 
+	if (!val)
+		val = 1;
+
 	tr->buffer_percent = val;
 
 	(*ppos)++;
@@ -8648,7 +8570,6 @@ static int __remove_instance(struct trace_array *tr)
 	ftrace_destroy_function_files(tr);
 	tracefs_remove_recursive(tr->dir);
 	free_trace_buffers(tr);
-	clear_tracing_err_log(tr);
 
 	for (i = 0; i < tr->nr_topts; i++) {
 		kfree(tr->topts[i].topts);
@@ -8986,7 +8907,7 @@ static __init int tracer_init_tracefs(void)
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 	trace_create_file("dyn_ftrace_total_info", 0444, d_tracer,
-			NULL, &tracing_dyn_info_fops);
+			&ftrace_update_tot_cnt, &tracing_dyn_info_fops);
 #endif
 
 	create_trace_instances(d_tracer);

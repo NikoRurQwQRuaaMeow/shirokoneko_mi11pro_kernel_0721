@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/clk.h>
@@ -107,6 +107,7 @@ enum {
 	TDM_7,
 	TDM_PORT_MAX,
 };
+
 #if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 #define TDM_MAX_SLOTS 4
 #else
@@ -1005,8 +1006,8 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
 	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOLUMEUP,
-	.key_code[2] = KEY_VOLUMEDOWN,
+	.key_code[1] = BTN_1,
+	.key_code[2] = BTN_2,
 	.key_code[3] = 0,
 	.key_code[4] = 0,
 	.key_code[5] = 0,
@@ -2947,8 +2948,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int port_id = 0;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 
 	port_id = msm_get_port_id(rtd->dai_link->id);
 	if (port_id < 0) {
@@ -4023,21 +4023,20 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("PRI_TDM_RX_0 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
-#if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
-#else
 	SOC_ENUM_EXT("PRI_TDM_RX_1 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
-#endif
 	SOC_ENUM_EXT("SEC_TDM_RX_0 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
 	SOC_ENUM_EXT("TERT_TDM_RX_0 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
+#if !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 	SOC_ENUM_EXT("TERT_TDM_RX_1 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
+#endif
 	SOC_ENUM_EXT("QUAT_TDM_RX_0 SampleRate", tdm_rx_sample_rate,
 			tdm_rx_sample_rate_get,
 			tdm_rx_sample_rate_put),
@@ -4144,8 +4143,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("PRI_TDM_RX_0 Format", tdm_rx_format,
 			tdm_rx_format_get,
 			tdm_rx_format_put),
-#if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
-#else
+#if !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 	SOC_ENUM_EXT("PRI_TDM_RX_1 Format", tdm_rx_format,
 			tdm_rx_format_get,
 			tdm_rx_format_put),
@@ -4243,8 +4241,7 @@ static const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("PRI_TDM_RX_0 Channels", tdm_rx_chs,
 			tdm_rx_ch_get,
 			tdm_rx_ch_put),
-#if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
-#else
+#if !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 	SOC_ENUM_EXT("PRI_TDM_RX_1 Channels", tdm_rx_chs,
 			tdm_rx_ch_get,
 			tdm_rx_ch_put),
@@ -4489,8 +4486,7 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 		rate->min = rate->max = tdm_rx_cfg[TDM_PRI][TDM_0].sample_rate;
 		break;
 
-#if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
-#else
+#if !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 	case MSM_BACKEND_DAI_PRI_TDM_RX_1:
 		channels->min = channels->max =
 				tdm_rx_cfg[TDM_PRI][TDM_1].channels;
@@ -5063,8 +5059,7 @@ static int msm_get_tdm_mode(u32 port_id)
 
 	switch (port_id) {
 	case AFE_PORT_ID_PRIMARY_TDM_RX:
-#if defined(CONFIG_TARGET_PRODUCT_REDWOOD)
-#else
+#if !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 	case AFE_PORT_ID_PRIMARY_TDM_RX_1:
 #endif
 	case AFE_PORT_ID_PRIMARY_TDM_TX:
@@ -5483,8 +5478,7 @@ void mi2s_disable_audio_vote(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int sample_rate = 0;
@@ -5520,8 +5514,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 	unsigned int fmt = SND_SOC_DAIFMT_CBS_CFS;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
@@ -5580,14 +5573,17 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			mi2s_intf_conf[index].audio_core_vote = true;
 		}
 
+		/* Check if msm needs to provide the clock to the interface */
+		if (!mi2s_intf_conf[index].msm_is_mi2s_master) {
+			mi2s_clk[index].clk_id = mi2s_ebit_clk[index];
+			fmt = SND_SOC_DAIFMT_CBM_CFM;
+		}
+
 		mi2s_clk[index].clk_freq_in_hz = (sample_rate *
 					MI2S_NUM_CHANNELS * bit_per_sample);
 		dev_dbg(rtd->card->dev, "%s: clock rate %ul\n", __func__,
 			mi2s_clk[index].clk_freq_in_hz);
 
-		/* Check if msm needs to provide the clock to the interface */
-		if (!mi2s_intf_conf[index].msm_is_mi2s_master)
-			mi2s_clk[index].clk_id = mi2s_ebit_clk[index];
 		ret = msm_mi2s_set_sclk(substream, true);
 		if (ret < 0) {
 			dev_err(rtd->card->dev,
@@ -5596,6 +5592,12 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			goto clean_up;
 		}
 
+		ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+		if (ret < 0) {
+			pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
+				__func__, index, ret);
+			goto clk_off;
+		}
 		if (pdata->mi2s_gpio_p[index]) {
 			if (atomic_read(&(pdata->mi2s_gpio_ref_count[index]))
 									== 0) {
@@ -5610,15 +5612,6 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			atomic_inc(&(pdata->mi2s_gpio_ref_count[index]));
 		}
 	}
-	if (!mi2s_intf_conf[index].msm_is_mi2s_master)
-		fmt = SND_SOC_DAIFMT_CBM_CFM;
-	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
-	if (ret < 0) {
-		pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
-			__func__, index, ret);
-		goto clk_off;
-	}
-
 clk_off:
 	if (ret < 0)
 		msm_mi2s_set_sclk(substream, false);
@@ -5637,8 +5630,7 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (rtd->cpu_dai->id) / 2;
+	int index = rtd->cpu_dai->id;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 
@@ -6811,7 +6803,7 @@ static struct snd_soc_dai_link msm_common_be_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(tert_tdm_rx_0),
 	},
-#if defined(CONFIG_SND_SOC_TFA9874) || defined(CONFIG_SND_SOC_AW88263S_TDM) || defined(CONFIG_SND_SOC_AW88263S_M20_TDM) 
+#if defined(CONFIG_SND_SOC_TFA9874) || defined(CONFIG_SND_SOC_AW88263S_TDM)
 #else
 	{
 		.name = LPASS_BE_TERT_TDM_RX_1,
@@ -7964,6 +7956,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 					sizeof(msm_mi2s_be_dai_links));
 				total_links +=
 					ARRAY_SIZE(msm_mi2s_be_dai_links);
+				dev_info(dev, "%s: Using msm_mi2s_be_dai_links\n", __func__);
 			}
 		}
 #ifndef CONFIG_AUXPCM_DISABLE
@@ -8196,8 +8189,6 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	bolero_register_wake_irq(component, false);
 
 	if (pdata->wcd_disabled) {
-		bolero_set_port_map(bolero_component,
-			ARRAY_SIZE(sm_port_map), sm_port_map);
 		codec_reg_done = true;
 		return 0;
 	}
@@ -8277,6 +8268,7 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	codec_reg_done = true;
 	return 0;
 }
+
 
 static void msm_i2s_auxpcm_init(struct platform_device *pdev)
 {

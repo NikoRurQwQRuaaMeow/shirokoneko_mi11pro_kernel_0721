@@ -212,6 +212,7 @@ static int wcd937x_init_reg(struct snd_soc_component *component)
 				WCD937X_BIAS_VBG_FINE_ADJ, 0xF0, 0xB0);
 		snd_soc_component_update_bits(component,
 				WCD937X_HPH_NEW_INT_RDAC_GAIN_CTL , 0xF0, 0x50);
+		dev_err(component->dev, "%s wcd937x is not smic\n",__func__);
 	}
 	return 0;
 }
@@ -1556,6 +1557,7 @@ static int wcd937x_enable_req(struct snd_soc_dapm_widget *w,
 		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_CDC_DIG_CLK_CTL, 0x10, 0x00);
 #endif
+
 		mutex_lock(&wcd937x->ana_tx_clk_lock);
 		wcd937x->ana_clk_count--;
 		if (wcd937x->ana_clk_count <= 0) {
@@ -1810,9 +1812,8 @@ static int wcd937x_event_notify(struct notifier_block *block,
 	case BOLERO_SLV_EVT_SSR_DOWN:
 		wcd937x->mbhc->wcd_mbhc.deinit_in_progress = true;
 		mbhc = &wcd937x->mbhc->wcd_mbhc;
-		if(mbhc->mbhc_cfg)
-			wcd937x->usbc_hs_status = get_usbc_hs_status(component,
-							mbhc->mbhc_cfg);
+		wcd937x->usbc_hs_status = get_usbc_hs_status(component,
+						mbhc->mbhc_cfg);
 		wcd937x_mbhc_ssr_down(wcd937x->mbhc, component);
 		wcd937x_reset_low(wcd937x->dev);
 		break;
@@ -1832,8 +1833,7 @@ static int wcd937x_event_notify(struct notifier_block *block,
 			dev_err(component->dev, "%s: mbhc initialization failed\n",
 				__func__);
 		} else {
-			if(mbhc->mbhc_cfg)
-				wcd937x_mbhc_hs_detect(component, mbhc->mbhc_cfg);
+			wcd937x_mbhc_hs_detect(component, mbhc->mbhc_cfg);
 			if (wcd937x->usbc_hs_status)
 				mdelay(500);
 		}
@@ -2148,7 +2148,7 @@ static const char * const rx_hph_mode_mux_text[] = {
 	"CLS_H_ULP", "CLS_AB_HIFI",
 };
 
-static const char * const tx_master_ch_text[] = {
+const char * const wcd937x_tx_master_ch_text[] = {
 	"ZERO", "SWRM_TX1_CH1", "SWRM_TX1_CH2", "SWRM_TX1_CH3", "SWRM_TX1_CH4",
 	"SWRM_TX2_CH1", "SWRM_TX2_CH2", "SWRM_TX2_CH3", "SWRM_TX2_CH4",
 	"SWRM_TX3_CH1", "SWRM_TX3_CH2", "SWRM_TX3_CH3", "SWRM_TX3_CH4",
@@ -2156,9 +2156,9 @@ static const char * const tx_master_ch_text[] = {
 	"DMIC4", "DMIC5", "DMIC6", "DMIC7",
 };
 
-static const struct soc_enum tx_master_ch_enum =
-	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tx_master_ch_text),
-					tx_master_ch_text);
+const struct soc_enum wcd937x_tx_master_ch_enum =
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(wcd937x_tx_master_ch_text),
+					wcd937x_tx_master_ch_text);
 
 static void wcd937x_tx_get_slave_ch_type_idx(const char *wname, int *ch_idx)
 {
@@ -2296,25 +2296,25 @@ static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 			analog_gain),
 	SOC_SINGLE_TLV("ADC3 Volume", WCD937X_ANA_TX_CH3, 0, 20, 0,
 			analog_gain),
-	SOC_ENUM_EXT("ADC1 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("ADC1 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("ADC2 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("ADC2 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("ADC3 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("ADC3 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC0 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC0 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC1 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC1 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("MBHC ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("MBHC ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC2 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC2 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC3 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC3 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC4 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC4 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
-	SOC_ENUM_EXT("DMIC5 ChMap", tx_master_ch_enum,
+	SOC_ENUM_EXT("DMIC5 ChMap", wcd937x_tx_master_ch_enum,
 			wcd937x_tx_master_ch_get, wcd937x_tx_master_ch_put),
 	SOC_ENUM_EXT("TX CH1 PWR", wcd937x_tx_ch_pwr_level_enum,
 		wcd937x_tx_ch_pwr_level_get, wcd937x_tx_ch_pwr_level_put),

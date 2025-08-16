@@ -3,6 +3,7 @@
  * cs35l45.c - CS35L45 ALSA SoC audio driver
  *
  * Copyright 2019 Cirrus Logic, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Author: James Schulman <james.schulman@cirrus.com>
  *
@@ -10,7 +11,6 @@
 #define DEBUG
 
 //#define MDSYNC_CS
-//#define FAST_SWITCH_DEBUG
 #define FAST_SWITCH_WORKAROUND
 
 #include <linux/module.h>

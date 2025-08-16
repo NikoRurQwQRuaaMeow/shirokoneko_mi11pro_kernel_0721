@@ -108,6 +108,7 @@ struct xiaomi_touch_interface {
 	u8 (*panel_color_read)(void);
 	u8 (*panel_display_read)(void);
 	char (*touch_vendor_read)(void);
+	int (*get_touch_super_resolution_factor)(void);
 	int long_mode_len;
 	int long_mode_value[MAX_BUF_SIZE];
 
@@ -130,8 +131,9 @@ struct xiaomi_touch {
 	struct mutex  mutex;
 	struct mutex  palm_mutex;
 	struct mutex  prox_mutex;
-	struct mutex fod_press_status_mutex;
 	wait_queue_head_t 	wait_queue;
+	struct mutex  fod_press_status_mutex;
+	struct mutex  gesture_single_tap_mutex;
 };
 
 #define LAST_TOUCH_EVENTS_MAX 512
@@ -192,9 +194,11 @@ extern int update_touch_rawdata(void);
 
 extern int update_clicktouch_raw(void);
 
+extern int update_fod_press_status(int value);
+
 extern void last_touch_events_collect(int slot, int state);
 
-extern int update_fod_press_status(int value);
+extern int notify_gesture_single_tap(void);
 
 int xiaomi_touch_set_suspend_state(int state);
 

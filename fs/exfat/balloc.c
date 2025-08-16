@@ -3,16 +3,9 @@
  *  Copyright (C) 2012-2013 Samsung Electronics Co., Ltd.
  */
 
-#include <linux/version.h>
 #include <linux/blkdev.h>
 #include <linux/slab.h>
 #include <linux/buffer_head.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/signal.h>
-#else
-#include <linux/sched.h>
-#endif
-#include <linux/vmalloc.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -76,12 +69,8 @@ static int exfat_allocate_bitmap(struct super_block *sb,
 	}
 	sbi->map_sectors = ((need_map_size - 1) >>
 			(sb->s_blocksize_bits)) + 1;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-	sbi->vol_amap = kvmalloc_array(sbi->map_sectors,
+	sbi->vol_amap = kmalloc_array(sbi->map_sectors,
 				sizeof(struct buffer_head *), GFP_KERNEL);
-#else
-	sbi->vol_amap = vmalloc(sbi->map_sectors * sizeof(struct buffer_head *));
-#endif
 	if (!sbi->vol_amap)
 		return -ENOMEM;
 
@@ -95,7 +84,7 @@ static int exfat_allocate_bitmap(struct super_block *sb,
 			while (j < i)
 				brelse(sbi->vol_amap[j++]);
 
-			kvfree(sbi->vol_amap);
+			kfree(sbi->vol_amap);
 			sbi->vol_amap = NULL;
 			return -EIO;
 		}
@@ -149,7 +138,7 @@ void exfat_free_bitmap(struct exfat_sb_info *sbi)
 	for (i = 0; i < sbi->map_sectors; i++)
 		__brelse(sbi->vol_amap[i]);
 
-	kvfree(sbi->vol_amap);
+	kfree(sbi->vol_amap);
 }
 
 int exfat_set_bitmap(struct inode *inode, unsigned int clu, bool sync)
@@ -159,9 +148,7 @@ int exfat_set_bitmap(struct inode *inode, unsigned int clu, bool sync)
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
-	if (!is_valid_cluster(sbi, clu))
-		return -EINVAL;
-
+	WARN_ON(clu < EXFAT_FIRST_CLUSTER);
 	ent_idx = CLUSTER_TO_BITMAP_ENT(clu);
 	i = BITMAP_OFFSET_SECTOR_INDEX(sb, ent_idx);
 	b = BITMAP_OFFSET_BIT_IN_SECTOR(sb, ent_idx);
@@ -179,9 +166,7 @@ void exfat_clear_bitmap(struct inode *inode, unsigned int clu, bool sync)
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_mount_options *opts = &sbi->options;
 
-	if (!is_valid_cluster(sbi, clu))
-		return;
-
+	WARN_ON(clu < EXFAT_FIRST_CLUSTER);
 	ent_idx = CLUSTER_TO_BITMAP_ENT(clu);
 	i = BITMAP_OFFSET_SECTOR_INDEX(sb, ent_idx);
 	b = BITMAP_OFFSET_BIT_IN_SECTOR(sb, ent_idx);

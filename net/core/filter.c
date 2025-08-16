@@ -4617,6 +4617,7 @@ static int bpf_fib_set_fwd_params(struct bpf_fib_lookup *params,
 	memcpy(params->smac, dev->dev_addr, ETH_ALEN);
 	params->h_vlan_TCI = 0;
 	params->h_vlan_proto = 0;
+	params->ifindex = dev->ifindex;
 
 	return 0;
 }
@@ -4713,7 +4714,6 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 	dev = nhc->nhc_dev;
 
 	params->rt_metric = res.fi->fib_priority;
-	params->ifindex = dev->ifindex;
 
 	/* xdp and cls_bpf programs are run in RCU-bh so
 	 * rcu_read_lock_bh is not needed here
@@ -4732,7 +4732,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 		neigh = __ipv6_neigh_lookup_noref_stub(dev, dst);
 	}
 
-	if (!neigh || !(neigh->nud_state & NUD_VALID))
+	if (!neigh)
 		return BPF_FIB_LKUP_RET_NO_NEIGH;
 
 	return bpf_fib_set_fwd_params(params, neigh, dev);
@@ -4839,13 +4839,12 @@ static int bpf_ipv6_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 
 	dev = res.nh->fib_nh_dev;
 	params->rt_metric = res.f6i->fib6_metric;
-	params->ifindex = dev->ifindex;
 
 	/* xdp and cls_bpf programs are run in RCU-bh so rcu_read_lock_bh is
 	 * not needed here.
 	 */
 	neigh = __ipv6_neigh_lookup_noref_stub(dev, dst);
-	if (!neigh || !(neigh->nud_state & NUD_VALID))
+	if (!neigh)
 		return BPF_FIB_LKUP_RET_NO_NEIGH;
 
 	return bpf_fib_set_fwd_params(params, neigh, dev);
@@ -8411,6 +8410,19 @@ static u32 sock_ops_convert_ctx_access(enum bpf_access_type type,
 	case offsetof(struct bpf_sock_ops, sk):
 		SOCK_OPS_GET_SK();
 		break;
+#ifdef CONFIG_MACH_XIAOMI
+	case offsetof(struct bpf_sock_ops, sk_uid):
+		SOCK_OPS_GET_FIELD(sk_uid, sk_uid, struct sock);
+		break;
+
+	case offsetof(struct bpf_sock_ops, voip_daddr):
+		SOCK_OPS_GET_FIELD(voip_daddr, sk_daddr, struct sock);
+		break;
+
+	case offsetof(struct bpf_sock_ops, voip_dport):
+		SOCK_OPS_GET_FIELD(voip_dport, sk_dport, struct sock);
+		break;
+#endif
 	}
 	return insn - insn_buf;
 }

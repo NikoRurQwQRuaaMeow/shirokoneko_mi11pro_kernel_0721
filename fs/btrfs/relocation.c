@@ -2511,7 +2511,7 @@ again:
 	list_splice(&reloc_roots, &rc->reloc_roots);
 
 	if (!err)
-		err = btrfs_commit_transaction(trans);
+		btrfs_commit_transaction(trans);
 	else
 		btrfs_end_transaction(trans);
 	return err;
@@ -4102,12 +4102,8 @@ int prepare_to_relocate(struct reloc_control *rc)
 		 */
 		return PTR_ERR(trans);
 	}
-
-	ret = btrfs_commit_transaction(trans);
-	if (ret)
-		unset_reloc_control(rc);
-
-	return ret;
+	btrfs_commit_transaction(trans);
+	return 0;
 }
 
 static noinline_for_stack int relocate_block_group(struct reloc_control *rc)
@@ -4267,9 +4263,7 @@ restart:
 		err = PTR_ERR(trans);
 		goto out_free;
 	}
-	ret = btrfs_commit_transaction(trans);
-	if (ret && !err)
-		err = ret;
+	btrfs_commit_transaction(trans);
 out_free:
 	ret = clean_dirty_subvols(rc);
 	if (ret < 0 && !err)

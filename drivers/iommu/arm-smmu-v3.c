@@ -755,18 +755,6 @@ static void queue_inc_cons(struct arm_smmu_ll_queue *q)
 	q->cons = Q_OVF(q->cons) | Q_WRP(q, cons) | Q_IDX(q, cons);
 }
 
-static void queue_sync_cons_ovf(struct arm_smmu_queue *q)
-{
-	struct arm_smmu_ll_queue *llq = &q->llq;
-
-	if (likely(Q_OVF(llq->prod) == Q_OVF(llq->cons)))
-		return;
-
-	llq->cons = Q_OVF(llq->prod) | Q_WRP(llq, llq->cons) |
-		      Q_IDX(llq, llq->cons);
-	queue_sync_cons_out(q);
-}
-
 static int queue_sync_prod_in(struct arm_smmu_queue *q)
 {
 	int ret = 0;
@@ -1727,7 +1715,8 @@ static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 	} while (!queue_empty(llq));
 
 	/* Sync our overflow flag, as we believe we're up to speed */
-	queue_sync_cons_ovf(q);
+	llq->cons = Q_OVF(llq->prod) | Q_WRP(llq, llq->cons) |
+		    Q_IDX(llq, llq->cons);
 	return IRQ_HANDLED;
 }
 
@@ -1785,7 +1774,9 @@ static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
 	} while (!queue_empty(llq));
 
 	/* Sync our overflow flag, as we believe we're up to speed */
-	queue_sync_cons_ovf(q);
+	llq->cons = Q_OVF(llq->prod) | Q_WRP(llq, llq->cons) |
+		      Q_IDX(llq, llq->cons);
+	queue_sync_cons_out(q);
 	return IRQ_HANDLED;
 }
 
@@ -3735,6 +3726,7 @@ static struct platform_driver arm_smmu_driver = {
 		.name			= "arm-smmu-v3",
 		.of_match_table		= of_match_ptr(arm_smmu_of_match),
 		.suppress_bind_attrs	= true,
+		.probe_type		= PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe	= arm_smmu_device_probe,
 	.remove	= arm_smmu_device_remove,

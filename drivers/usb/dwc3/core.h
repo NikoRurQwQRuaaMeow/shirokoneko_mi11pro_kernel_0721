@@ -267,6 +267,9 @@
 #define DWC3_GCTL_GBLHIBERNATIONEN	BIT(1)
 #define DWC3_GCTL_DSBLCLKGTNG		BIT(0)
 
+/* Global User Control Register */
+#define DWC3_GUCTL_HSTINAUTORETRY	BIT(14)
+
 /* Global User Control 1 Register */
 #define DWC3_GUCTL1_PARKMODE_DISABLE_SS	BIT(17)
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
@@ -989,6 +992,11 @@ struct dwc3_request {
 #define DWC3_REQUEST_STATUS_COMPLETED	3
 #define DWC3_REQUEST_STATUS_UNKNOWN	-1
 
+/* Add the suitable Feedback status to interface*/
+#define DWC3_REQUEST_STATUS_DISCONNECTED	6
+#define DWC3_REQUEST_STATUS_DEQUEUED		5
+#define DWC3_REQUEST_STATUS_STALLED		4
+
 	u8			epnum;
 	struct dwc3_trb		*trb;
 	dma_addr_t		trb_dma;
@@ -1091,6 +1099,7 @@ struct dwc3_scratchpad_array {
  * @tx_max_burst_prd: max periodic ESS transmit burst size
  * @hsphy_interface: "utmi" or "ulpi"
  * @connected: true when we're connected to a host, false otherwise
+ * @softconnect: true when gadget connect is called, false when disconnect runs
  * @delayed_status: true when gadget driver asks for delayed status
  * @ep0_bounced: true when we used bounce buffer
  * @ep0_expect_in: true when we expect a DATA IN transfer
@@ -1289,6 +1298,7 @@ struct dwc3 {
 #define DWC31_VERSIONTYPE_EA04		0x65613034
 #define DWC31_VERSIONTYPE_EA05		0x65613035
 #define DWC31_VERSIONTYPE_EA06		0x65613036
+#define DWC31_VERSIONTYPE_GA		0x67612a2a
 
 	enum dwc3_ep0_next	ep0_next_event;
 	enum dwc3_ep0_state	ep0state;
@@ -1321,6 +1331,7 @@ struct dwc3 {
 	const char		*hsphy_interface;
 
 	unsigned		connected:1;
+	unsigned		softconnect:1;
 	unsigned		delayed_status:1;
 	unsigned		ep0_bounced:1;
 	unsigned		ep0_expect_in:1;
@@ -1403,8 +1414,6 @@ struct dwc3 {
 	enum gadget_state	gadget_state;
 	/* Indicate if the gadget was powered by the otg driver */
 	unsigned int		vbus_active:1;
-	/* Indicate if software connect was issued by the usb_gadget_driver */
-	unsigned int		softconnect:1;
 	/*
 	 * If true, PM suspend/freeze allowed irrespective of host runtimePM
 	 * state. In PM suspend/resume case, core will stay powered and
@@ -1423,6 +1432,8 @@ struct dwc3 {
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
 	bool			dual_port;
+	struct work_struct 	check_cmd_work;
+	int			gs_cmd_status;
 };
 
 #define INCRX_BURST_MODE 0
@@ -1604,6 +1615,8 @@ bool dwc3_has_imod(struct dwc3 *dwc);
 int dwc3_event_buffers_setup(struct dwc3 *dwc);
 void dwc3_event_buffers_cleanup(struct dwc3 *dwc);
 
+int dwc3_core_soft_reset(struct dwc3 *dwc);
+
 #if IS_ENABLED(CONFIG_USB_DWC3_HOST) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
 int dwc3_host_init(struct dwc3 *dwc);
 void dwc3_host_exit(struct dwc3 *dwc);
@@ -1730,6 +1743,8 @@ enum dwc3_notify_event {
 	DWC3_GSI_EVT_BUF_CLEAR,
 	DWC3_GSI_EVT_BUF_FREE,
 	DWC3_CONTROLLER_NOTIFY_CLEAR_DB,
+	/*USB RESTART EVENT*/
+	DWC3_USB_RESTART_EVENT,
 };
 
 extern void dwc3_set_notifier(void (*notify)(struct dwc3 *dwc3,

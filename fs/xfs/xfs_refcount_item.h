@@ -80,7 +80,6 @@ extern struct kmem_zone	*xfs_cud_zone;
 struct xfs_cui_log_item *xfs_cui_init(struct xfs_mount *, uint);
 void xfs_cui_item_free(struct xfs_cui_log_item *);
 void xfs_cui_release(struct xfs_cui_log_item *);
-int xfs_cui_recover(struct xfs_cui_log_item *cuip,
-		struct list_head *capture_list);
+int xfs_cui_recover(struct xfs_trans *parent_tp, struct xfs_cui_log_item *cuip);
 
 #endif	/* __XFS_REFCOUNT_ITEM_H__ */

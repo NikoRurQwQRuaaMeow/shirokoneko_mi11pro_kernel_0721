@@ -53,7 +53,6 @@ static atomic_t in_suspend;
 static bool power_off_triggered;
 
 static struct thermal_governor *def_governor;
-
 #ifdef CONFIG_QTI_THERMAL
 struct device thermal_message_dev;
 EXPORT_SYMBOL_GPL(thermal_message_dev);
@@ -71,7 +70,6 @@ const char *board_sensor;
 static char board_sensor_temp[128];
 static char board_sensor_second_temp[128];
 #endif
-
 /*
  * Governor section: set of functions to handle thermal governors
  *
@@ -2145,7 +2143,7 @@ int create_thermal_message_node(void)
 		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_modem_limit.attr);
 		if (ret < 0)
 			pr_warn("Thermal: create modem limit node failed\n");
-		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_market_download_limit.attr);
+        ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_market_download_limit.attr);
 		if (ret < 0)
 			pr_warn("Thermal: create market download limit node failed\n");
 		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_flash_state.attr);
@@ -2157,6 +2155,7 @@ int create_thermal_message_node(void)
 		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_poor_modem_limit.attr);
                 if (ret < 0)
                         pr_warn("Thermal: create poor modem limit node failed\n");
+
 	}
 	return ret;
 }
@@ -2166,11 +2165,11 @@ static void destroy_thermal_message_node(void)
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_poor_modem_limit.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_wifi_limit.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_flash_state.attr);
-	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_market_download_limit.attr);
+    sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_market_download_limit.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_charger_temp.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_modem_limit.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_board_sensor_temp.attr);
-	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_board_sensor_second_temp.attr);
+    sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_board_sensor_second_temp.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_board_sensor.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_cpu_limits.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_temp_state.attr);
@@ -2213,7 +2212,6 @@ static int __init thermal_init(void)
 		pr_warn("Thermal: Can not register suspend notifier, return %d\n",
 			result);
 	thermal_debug_init();
-
 
 	result = of_parse_thermal_message();
 	if (result)

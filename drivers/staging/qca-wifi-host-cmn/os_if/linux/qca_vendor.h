@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -2360,10 +2360,6 @@ enum qca_wlan_vendor_attr_ll_stats_results {
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_CHANNEL_RX_TIME = 85,
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_CHANNEL_LOAD_PERCENTAGE = 86,
 
-	/* u8 value representing the time slicing duty cycle percentage.
-	 * Possible values are 0-100.
-	 */
-	QCA_WLAN_VENDOR_ATTR_LL_STATS_IFACE_INFO_TS_DUTY_CYCLE = 87,
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_MAX =
@@ -3245,41 +3241,6 @@ enum qca_vendor_attr_roam_candidate_selection_criteria {
  *	threshold value specified by the
  *	QCA_ATTR_ROAM_CONTROL_CANDIDATE_RSSI_THRESHOLD attribute shall be used.
  *
- * @QCA_ATTR_ROAM_CONTROL_HO_DELAY_FOR_RX: u16 value in milliseconds.
- *	Optional parameter. This configuration delays hand-off (in msec) by the
- *	specified duration to receive pending rx frames from current BSS.
- *
- * @QCA_ATTR_ROAM_CONTROL_FULL_SCAN_NO_REUSE_PARTIAL_SCAN_FREQ: Unsigned 8-bit
- *	value.
- *	During the roam scan, if there are no desired APs found in the partial
- *	frequency list, an immediate full scan on all the supported frequencies
- *	is initiated as a fallback. This flag controls the frequency list
- *	creation for the full scan on the following lines.
- *	1 - Full scan to exclude the frequencies that were already scanned by
- *	    the previous partial scan.
- *	0 - Full scan to include all the supported frequencies irrespective of
- *	    the ones part of the earlier partial scan.
- *	If this flag is not specified, a full scan shall include all the
- *	supported frequencies irrespective of the ones part of an earlier
- *	partial scan.
- *
- * @QCA_ATTR_ROAM_CONTROL_FULL_SCAN_6GHZ_ONLY_ON_PRIOR_DISCOVERY: Unsigned 8-bit
- *	value.
- *	During the roam scan, if there are no desired APs found in the partial
- *	frequency list, an immediate full scan on all the supported frequencies
- *	is initiated as a fallback. This full scan would add the 2.4/5/6 GHz
- *	frequencies, including all PSC frequencies by default. This attribute
- *	controls the inclusion of the 6 GHz PSC frequencies for the full scan
- *	as following.
- *	1 - Full scan to include the supported 6 GHz PSC frequencies only on the
- *	    prior discovery of any 6 GHz frequency support in the environment.
- *	    This discovery can happen through a prior RNR, 11k neighbor
- *	    request, 11v BTM request, host scan, etc.
- *	0 - Default behavior. Full scan to include all the supported 6 GHz
- *	    PSC frequencies regardless of whether 6 GHz BSSs have been
- *	    discovered.
- *	The default behavior if this flag is not specified is to include all
- *	the supported 6 GHz PSC frequencies in the roam full scan.
  */
 enum qca_vendor_attr_roam_control {
 	QCA_ATTR_ROAM_CONTROL_ENABLE = 1,
@@ -3298,9 +3259,6 @@ enum qca_vendor_attr_roam_control {
 	QCA_ATTR_ROAM_CONTROL_CANDIDATE_RSSI_THRESHOLD_2P4GHZ = 14,
 	QCA_ATTR_ROAM_CONTROL_CANDIDATE_RSSI_THRESHOLD_5GHZ = 15,
 	QCA_ATTR_ROAM_CONTROL_CANDIDATE_RSSI_THRESHOLD_6GHZ = 16,
-	QCA_ATTR_ROAM_CONTROL_HO_DELAY_FOR_RX = 25,
-	QCA_ATTR_ROAM_CONTROL_FULL_SCAN_NO_REUSE_PARTIAL_SCAN_FREQ = 26,
-	QCA_ATTR_ROAM_CONTROL_FULL_SCAN_6GHZ_ONLY_ON_PRIOR_DISCOVERY = 27,
 
 	/* keep last */
 	QCA_ATTR_ROAM_CONTROL_AFTER_LAST,
@@ -4827,28 +4785,20 @@ enum qca_wlan_vendor_attr_config {
 	 */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_FT_OVER_DS = 80,
 
-	/*
-	 * 8-bit unsigned value. This attribute can be used to configure the
-	 * firmware to enable/disable ARP/NS offload feature. Possible values
-	 * for this attribute are 0-Disable and 1-Enable.
-	 *
-	 * This attribute is only applicable for STA/P2P-Client interface,
-	 * and is optional, default behavior is APR/NS offload Enable.
-	 *
-	 * This attribute can be set in disconncted and connected state, and
-	 * will restore to default behavior if interface is closed.
+	/* 8-bit unsigned value to trigger dynamic nss feature.
+	 * 1-Enable, 0-Disable
 	 */
-	QCA_WLAN_VENDOR_ATTR_CONFIG_ARP_NS_OFFLOAD = 81,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_DYNAMIC_NSS_SWITCH = 81,
 
-	/* 8-bit unsigned value, whenever wifi calling (wfc) begin or end,
-	 * Userspace sends this information to driver/firmware to configure
-	 * wfc state. Driver/Firmware uses this information to
-	 * optimize power savings, rate adaption, roaming, etc.
-	 *
-	 * 1 - wfc is on.
-	 * 0 - wfc is off.
+	/* 8-bit unsigned value to set bt in active or not.
+	 * 1-active, 0-inactive
 	 */
-	QCA_WLAN_VENDOR_ATTR_CONFIG_WFC_STATE = 86,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_BT_ACTIVE = 82,
+
+	/* 8-bit unsigned value to set nss and ant mode.
+	 * 1-1x1, 2-2x2
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_SET_NSS_ANT = 83,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,

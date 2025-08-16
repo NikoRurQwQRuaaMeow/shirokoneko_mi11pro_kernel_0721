@@ -150,13 +150,6 @@ void place_marker(const char *name)
 }
 EXPORT_SYMBOL(place_marker);
 
-void update_marker(const char *name)
-{
-	destroy_marker(name);
-	place_marker(name);
-}
-EXPORT_SYMBOL(update_marker);
-
 void destroy_marker(const char *name)
 {
 	_destroy_boot_marker((char *) name);
@@ -224,7 +217,7 @@ static ssize_t bootkpi_writer(struct kobject *obj, struct kobj_attribute *attr,
 		return rc;
 
 	buf[rc] = '\0';
-	update_marker(buf);
+	place_marker(buf);
 	return rc;
 }
 

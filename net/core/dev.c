@@ -2251,8 +2251,6 @@ int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask,
 	bool active = false;
 	unsigned int nr_ids;
 
-	WARN_ON_ONCE(index >= dev->num_tx_queues);
-
 	if (dev->num_tc) {
 		/* Do not allow XPS on subordinate device directly */
 		num_tc = dev->num_tc;
@@ -2742,10 +2740,8 @@ void __dev_kfree_skb_any(struct sk_buff *skb, enum skb_free_reason reason)
 {
 	if (in_irq() || irqs_disabled())
 		__dev_kfree_skb_irq(skb, reason);
-	else if (unlikely(reason == SKB_REASON_DROPPED))
-		kfree_skb(skb);
 	else
-		consume_skb(skb);
+		dev_kfree_skb(skb);
 }
 EXPORT_SYMBOL(__dev_kfree_skb_any);
 
@@ -2943,7 +2939,7 @@ __be16 skb_network_protocol(struct sk_buff *skb, int *depth)
 		type = eth->h_proto;
 	}
 
-	return vlan_get_protocol_and_depth(skb, type, depth);
+	return __vlan_get_protocol(skb, type, depth);
 }
 
 /**
@@ -4007,10 +4003,8 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		u32 next_cpu;
 		u32 ident;
 
-		/* First check into global flow table if there is a match.
-		 * This READ_ONCE() pairs with WRITE_ONCE() from rps_record_sock_flow().
-		 */
-		ident = READ_ONCE(sock_flow_table->ents[hash & sock_flow_table->mask]);
+		/* First check into global flow table if there is a match */
+		ident = sock_flow_table->ents[hash & sock_flow_table->mask];
 		if ((ident ^ hash) & ~rps_cpu_mask)
 			goto try_rps;
 
@@ -4760,7 +4754,6 @@ EXPORT_SYMBOL(gsb_nw_stack_recv);
 #endif
 
 static int (*embms_tm_multicast_recv)(struct sk_buff *skb) __rcu __read_mostly;
-EXPORT_SYMBOL(embms_tm_multicast_recv);
 
 void process_embms_receive_skb(struct sk_buff *skb)
 {
@@ -9498,7 +9491,9 @@ void netdev_run_todo(void)
 		BUG_ON(!list_empty(&dev->ptype_specific));
 		WARN_ON(rcu_access_pointer(dev->ip_ptr));
 		WARN_ON(rcu_access_pointer(dev->ip6_ptr));
-
+#if IS_ENABLED(CONFIG_DECNET)
+		WARN_ON(dev->dn_ptr);
+#endif
 		if (dev->priv_destructor)
 			dev->priv_destructor(dev);
 		if (dev->needs_free_netdev)

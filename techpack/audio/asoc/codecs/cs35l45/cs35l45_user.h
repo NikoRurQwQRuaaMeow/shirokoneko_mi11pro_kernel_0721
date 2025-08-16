@@ -2,6 +2,7 @@
  * linux/sound/cs35l45.h -- Platform data for CS35L45
  *
  * Copyright 2019 Cirrus Logic, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Author: James Schulman <james.schulman@cirrus.com>
  *

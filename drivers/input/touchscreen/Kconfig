@@ -1320,7 +1320,7 @@ source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
 config TOUCHSCREEN_SYNAPTICS_DSX
 	bool "Synaptics DSX Touchscreen Driver"
 	depends on I2C
-	default y
+	default n
 	help
 	  Say Y here if you have a Synaptics Touchscreen.
 
@@ -1339,18 +1339,25 @@ source "drivers/input/touchscreen/focaltech_spi/Kconfig"
 
 source "drivers/input/touchscreen/focaltech_3658u/Kconfig"
 
-source "drivers/input/touchscreen/focaltech_3680/Kconfig"
-
 source "drivers/input/touchscreen/fts_spi/Kconfig"
 
 source "drivers/input/touchscreen/fts_dual/Kconfig"
 
-source "drivers/input/touchscreen/gt9916/Kconfig"
-
 source "drivers/input/touchscreen/gt9897t/Kconfig"
 
-source "drivers/input/touchscreen/synaptics_s3908p/Kconfig"
+source "drivers/input/touchscreen/gt9916_m20/Kconfig"
+
+source "drivers/input/touchscreen/zinitix_bt541/Kconfig"
 
 source "drivers/input/touchscreen/xiaomi/Kconfig"
+
+config TOUCHSCREEN_COMMON
+	bool "Common touchscreen interface to interact with userspace"
+	default y
+	help
+	  Say Y here if you want to control touchpanel features via
+	  /sys/touchpanel.
+
+	  If unsure, say N.
 
 endif

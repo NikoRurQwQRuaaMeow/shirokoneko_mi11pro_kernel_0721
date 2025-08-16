@@ -782,9 +782,7 @@ union bpf_attr {
  * 		performed again, if the helper is used in combination with
  * 		direct packet access.
  * 	Return
- * 		0 on success, or a negative error in case of failure. Positive
- * 		error indicates a potential drop or congestion in the target
- * 		device. The particular positive error codes are not defined.
+ * 		0 on success, or a negative error in case of failure.
  *
  * u64 bpf_get_current_pid_tgid(void)
  * 	Return
@@ -3383,6 +3381,9 @@ struct bpf_sock_ops {
 	__u64 bytes_received;
 	__u64 bytes_acked;
 	__bpf_md_ptr(struct bpf_sock *, sk);
+	__u32 sk_uid;
+	__u32 voip_daddr;
+	__u32 voip_dport;
 };
 
 /* Definitions for bpf_sock_ops_cb_flags */
@@ -3447,6 +3448,9 @@ enum {
 					 */
 	BPF_SOCK_OPS_RTT_CB,		/* Called on every RTT.
 					 */
+
+	BPF_SOCK_OPS_VOIP_CB,		/* Called on every udp states. 
+					*/
 };
 
 /* List of TCP states. There is a build check in net/ipv4/tcp.c to detect

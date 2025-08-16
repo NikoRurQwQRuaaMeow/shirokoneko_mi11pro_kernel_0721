@@ -182,7 +182,7 @@ static void qrtr_mhi_dev_state_cb(struct mhi_dev_client_cb_data *cb_data)
 			return;
 		}
 
-		rc = qrtr_endpoint_register(&qep->ep, qep->net_id, qep->rt, NULL);
+		rc = qrtr_endpoint_register(&qep->ep, qep->net_id, qep->rt);
 		if (rc) {
 			dev_err(qep->dev, "register failed %d\n", rc);
 			qrtr_mhi_dev_close_channels(qep);

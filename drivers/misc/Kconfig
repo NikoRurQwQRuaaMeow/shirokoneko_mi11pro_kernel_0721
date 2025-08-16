@@ -525,14 +525,32 @@ config HISI_HIKEY_USB
 	  If you say yes here you get support for usb functionality of HiSilicon Hikey Platform.
 
 config MI_HARDWARE_ID
-	tristate "Xiaomi hardware identification module"
+	tristate "Register xiaomi hwid module"
 	default n
 	help
 	  This adds support for mi hwid.
 
+config PERF_HELPER
+	tristate "Record perflock messages"
+	default n
+	help
+	  this module support record perf lock history and other perf messages.
+
+config GPIO_TESTING_MODE
+	tristate "A simple GPIO testing mode driver"
+	default n
+	help
+	  Enable driver for a simple testing mode detection.
+
+config BOOTUP_RECLAIM
+        bool "bootup reclaim"
+        default n
+        help
+          reclaim global memory when bootup
+
 config MMHARDWARE_OTHER_DETECTION
 	tristate "Register xiaomi mmhardware detection module"
-	default m
+	default y
 	help
 	  This adds support for mmhardware detection
 

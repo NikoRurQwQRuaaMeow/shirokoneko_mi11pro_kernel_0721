@@ -55,8 +55,7 @@
 
 #include <linux/notifier.h>
 #include <linux/backlight.h>
-#include <drm/dsi_display_fod.h>
-#include <drm/mi_disp_notifier.h>
+#include <drm/drm_panel.h>
 
 #include <linux/fb.h>
 #include <linux/proc_fs.h>
@@ -131,6 +130,9 @@ static u8 key_mask;
 
 extern spinlock_t fts_int;
 struct fts_ts_info *fts_info;
+#if defined(CONFIG_DRM_PANEL)
+static struct drm_panel *active_panel;
+#endif
 static int fts_init_sensing(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
 static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
@@ -152,6 +154,8 @@ extern void lpm_disable_for_dev(bool on, char event_dev);
 static int fts_write_charge_status(int status);
 #endif
 
+extern int mi_disp_set_fod_queue_work(u32 fod_btn, bool from_touch);
+
 /**
 * Release all the touches in the linux input subsystem
 * @param info pointer to fts_ts_info which contains info about the device and its hw setup
@@ -161,7 +165,6 @@ void release_all_touches(struct fts_ts_info *info)
 	unsigned int type = MT_TOOL_FINGER;
 	int i;
 
-	dsi_display_primary_request_fod_hbm(0);
 	for (i = 0; i < TOUCH_ID_MAX; i++) {
 #ifdef STYLUS_MODE
 		if (test_bit(i, &info->stylus_id))
@@ -177,8 +180,13 @@ void release_all_touches(struct fts_ts_info *info)
 	}
 	input_sync(info->input_dev);
 	input_report_key(info->input_dev, BTN_INFO, 0);
+	mi_disp_set_fod_queue_work(0, true);
+	input_sync(info->input_dev);
+#ifdef FTS_FOD_AREA_REPORT
+	input_report_key(info->input_dev, BTN_INFO, 0);
 	update_fod_press_status(0);
 	input_sync(info->input_dev);
+#endif
 #ifdef CONFIG_FTS_BOOST
 	lpm_disable_for_dev(false, EVENT_INPUT);
 #endif
@@ -230,7 +238,7 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 				  const char *buf, size_t count)
 {
 	int ret, mode[2];
-	char path[100];
+	char path[101];
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
 	/* by default(if not specified by the user) set the force = 0 and keep_cx to 1 */
@@ -1244,12 +1252,15 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			res = (res | ERROR_DISABLE_INTER);
 			goto END;
 		}
-		res = mi_disp_unregister_client(&info->notifier);
+#if defined(CONFIG_DRM)
+	if (active_panel)
+		res = drm_panel_notifier_unregister(active_panel, &info->notifier);
 		if (res < 0) {
 			logError(1, "%s ERROR: unregister notifier failed!\n",
 				 tag);
 			goto END;
 		}
+#endif
 		switch (typeOfComand[0]) {
 			/*ITO TEST */
 		case 0x01:
@@ -1467,9 +1478,10 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		res = ERROR_OP_NOT_ALLOW;
 
 	}
-	if (mi_disp_register_client(&info->notifier) < 0) {
-		logError(1, "%s ERROR: register notifier failed!\n", tag);
-	}
+#if defined(CONFIG_DRM)
+	if (active_panel)
+		drm_panel_notifier_register(active_panel, &info->notifier);
+#endif
 END:
 	all_strbuff = (u8 *) kzalloc(size, GFP_KERNEL);
 
@@ -3337,27 +3349,6 @@ static ssize_t fts_touchgame_store(struct device *dev,
 	logError(1, " %s %s,buf:%s,count:%zu\n", tag, __func__, buf, count);
 	sscanf(buf, "%d %d", &mode, &value);
 	fts_set_cur_value(mode, value);
-
-	return count;
-}
-#endif
-
-#ifdef FTS_FOD_AREA_REPORT
-static ssize_t fts_fod_status_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct fts_ts_info *info = dev_get_drvdata(dev);
-
-	return snprintf(buf, TSP_BUF_SIZE, "%d\n", info->fod_status);
-}
-
-static ssize_t fts_fod_status_store(struct device *dev, struct device_attribute *attr,
-				    const char *buf, size_t count)
-{
-	struct fts_ts_info *info = dev_get_drvdata(dev);
-
-	sscanf(buf, "%u", &info->fod_status);
-	queue_work(info->event_wq, &info->mode_handler_work);
-
 	return count;
 }
 #endif
@@ -3683,11 +3674,6 @@ static DEVICE_ATTR(grip_enable, (S_IRUGO | S_IWUSR | S_IWGRP),
 static DEVICE_ATTR(grip_area, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   fts_grip_area_show, fts_grip_area_store);
 
-#ifdef FTS_FOD_AREA_REPORT
-static DEVICE_ATTR(fod_status, (S_IRUGO | S_IWUSR | S_IWGRP),
-		   fts_fod_status_show, fts_fod_status_store);
-#endif
-
 static DEVICE_ATTR(hover_tune, (S_IRUGO | S_IWUSR | S_IWGRP), NULL, fts_hover_autotune_store);
 
 #ifdef FTS_XIAOMI_TOUCHFEATURE
@@ -3954,23 +3940,24 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info,
 #ifdef FTS_FOD_AREA_REPORT
 		if (fts_is_in_fodarea(x, y) && !(info->fod_id & ~(1 << touchId))) {
 			__set_bit(touchId, &info->sleep_finger);
+			logError(1, "%s :Event 0x%02x", __func__, *event);
 			if (fts_fingerprint_is_enable()) {
-				dsi_display_primary_request_fod_hbm(1);
 				info->fod_x = x;
 				info->fod_y = y;
 				info->fod_coordinate_update = true;
 				__set_bit(touchId, &info->fod_id);
 				input_report_abs(info->input_dev, ABS_MT_WIDTH_MINOR, info->fod_overlap);
-				input_report_key(info->input_dev, BTN_INFO, 1);
-				update_fod_press_status(1);
-				input_sync(info->input_dev);
+				if (info->board->support_fod) {
+					input_report_key(info->input_dev, BTN_INFO, 1);
+					update_fod_press_status(1);
+				}
+				logError(1,	"%s  %s :  FOD Press :%d, fod_id:%08x\n", tag, __func__, touchId, info->fod_id);
 			}
 		} else if (__test_and_clear_bit(touchId, &info->fod_id)) {
-			dsi_display_primary_request_fod_hbm(0);
+			logError(1, "%s :Event 0x%02x", __func__, *event);
 			input_report_abs(info->input_dev, ABS_MT_WIDTH_MINOR, 0);
 			input_report_key(info->input_dev, BTN_INFO, 0);
 			update_fod_press_status(0);
-			input_sync(info->input_dev);
 			info->fod_x = 0;
 			info->fod_y = 0;
 			info->fod_coordinate_update = false;
@@ -3983,13 +3970,6 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info,
 	dev_dbg(info->dev,
 		"%s  %s :  Event 0x%02x - ID[%d], (x, y, major, minor, angle) = (%3d, %3d, %3d, %3d, %3d) type = %d, overlap:%d\n",
 		tag, __func__, *event, touchId, x, y, major, minor, angle, touchType, info->fod_overlap);
-	if (eventid == 0x13) {
-
-		logError(1,
-			"%s  %s :  Event 0x%02x - Press ID[%d] type = %d\n", tag,
-				__func__, event[0], touchId, touchType);
-		last_touch_events_collect(touchId, 1);
-	}
 
 #ifndef FTS_FOD_AREA_REPORT
 no_report:
@@ -4078,18 +4058,15 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info,
 	}
 	__clear_bit(touchId, &info->sleep_finger);
 	if (__test_and_clear_bit(touchId, &info->fod_id)) {
-		dsi_display_primary_request_fod_hbm(0);
 		input_report_abs(info->input_dev, ABS_MT_WIDTH_MINOR, 0);
 		input_report_key(info->input_dev, BTN_INFO, 0);
 		update_fod_press_status(0);
-		input_sync(info->input_dev);
 		info->fod_coordinate_update = false;
 		info->fod_x = 0;
 		info->fod_y = 0;
 	}
 	input_mt_report_slot_state(info->input_dev, tool, 0);
 	if (info->touch_id == 0) {
-		dsi_display_primary_request_fod_hbm(0);
 		input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
 		if (!touch_condition)
 			input_report_key(info->input_dev, BTN_TOOL_FINGER, 0);
@@ -4100,7 +4077,6 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info,
 		info->fod_pressed = false;
 		input_report_key(info->input_dev, BTN_INFO, 0);
 		update_fod_press_status(0);
-		input_sync(info->input_dev);
 
 #ifdef FTS_XIAOMI_TOUCHFEATURE
 		wake_up(&info->wait_queue);
@@ -4110,17 +4086,7 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info,
 		info->fod_id = 0;
 	}
 	info->last_x[touchId] = info->last_y[touchId] = 0;
-	input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
-	if (fod_up)
-		logError(1,
-			"%s  %s :  Event FOD - release ID[%d] type = %d\n", tag,
-			__func__, touchId, touchType);
-	else {
-		logError(1,
-			"%s  %s :  Event 0x%02x - release ID[%d] type = %d\n", tag,
-			__func__, event[0], touchId, touchType);
-	}
-	last_touch_events_collect(touchId, 0);
+	//input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
 	info->fod_down = false;
 
 	input_sync(info->input_dev);
@@ -4477,7 +4443,6 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 #ifdef FTS_FOD_AREA_REPORT
 		if (event[2] == GEST_ID_LONG_PRESS) {
 			if (!fts_fingerprint_is_enable()) {
-				logError(1, "%s %s fod is not enabled,don't need to report fod event\n", tag, __func__);
 				goto gesture_done;
 			}
 			if (!info->fod_down) {
@@ -4492,7 +4457,6 @@ static void fts_gesture_event_handler(struct fts_ts_info *info,
 				info->fod_overlap = fod_overlap;
 
 				if ((info->sensor_sleep && !info->sleep_finger) || !info->sensor_sleep) {
-					dsi_display_primary_request_fod_hbm(1);
 					info->fod_pressed = true;
 					input_report_key(info->input_dev, BTN_INFO, 1);
 					update_fod_press_status(1);
@@ -5524,7 +5488,10 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 static int fts_init_sensing(struct fts_ts_info *info)
 {
 	int error = 0;
-	error |= mi_disp_register_client(&info->notifier);
+#if defined(CONFIG_DRM_PANEL)
+	if (active_panel)
+		error |= drm_panel_notifier_register(active_panel, &info->notifier);
+#endif
 	error |= fts_interrupt_install(info);
 	error |= fts_mode_handler(info, 0);
 #ifdef FTS_FOD_AREA_REPORT
@@ -6351,17 +6318,35 @@ static int fts_set_fod_status(int value)
 	int res = 0;
 	u8 gesture_cmd[6] = {0xA2, 0x03, 0x00, 0x00, 0x00, 0x03};
 
+	pm_stay_awake(fts_info->dev);
+
+	if (fts_info->fod_pressed && fts_info->fod_status == value) {
+		logError(1, "%s %s has already set and process:%d\n", tag, __func__, value);
+		return res;
+	}
 	fts_info->fod_status = value;
-	if (fts_info->fod_status == 2) {
+
+	if (fts_info->fod_status == 1 || fts_info->fod_status == 3) {
 		mutex_lock(&fts_info->fod_mutex);
-		res = fts_write(gesture_cmd, ARRAY_SIZE(gesture_cmd));
+		if (fts_info->gesture_enabled == 1)
+			gesture_cmd[2] = 0x20;
+
+		if (!fts_info->resume_bit) {
+			setScanMode(SCAN_MODE_LOW_POWER, 0);
+			fts_enableInterrupt();
+		}
+
+		res = fts_write_dma_safe(gesture_cmd, ARRAY_SIZE(gesture_cmd));
 		if (res < OK)
 			logError(1, "%s %s: enter gesture and longpress failed! ERROR %08X recovery in senseOff...\n",
 			tag, __func__, res);
 		else
 			logError(1, "%s %s send gesture and longpress cmd success\n", tag, __func__);
+
+		msleep(12);
 		mutex_unlock(&fts_info->fod_mutex);
 	}
+	pm_relax(fts_info->dev);
 	return res;
 }
 
@@ -6837,15 +6822,6 @@ static void fts_suspend_work(struct work_struct *work)
 
 /**@}*/
 
-static void fts_mode_handler_work(struct work_struct *work)
-{
-	struct fts_ts_info *info;
-
-	info = container_of(work, struct fts_ts_info, mode_handler_work);
-
-	fts_mode_handler(info, 0);
-}
-
 /**
  * Callback function used to detect the suspend/resume events generated by clicking the power button.
  * This function schedule a suspend or resume work according to the event received.
@@ -6855,14 +6831,13 @@ static int fts_drm_state_chg_callback(struct notifier_block *nb,
 {
 	struct fts_ts_info *info =
 	    container_of(nb, struct fts_ts_info, notifier);
-	struct mi_disp_notifier *evdata = data;
+	struct drm_panel_notifier *evdata = data;
 	unsigned int blank;
 
-	logError(0, "%s %s: fts notifier begin!\n", tag, __func__);
-
-	if (evdata->disp_id != MI_DISPLAY_PRIMARY) {
-		logError(1, "%s %s: not primary display\n", tag, __func__);
-		return NOTIFY_OK;
+	if (!(val == DRM_PANEL_EARLY_EVENT_BLANK ||
+		val == DRM_PANEL_EVENT_BLANK)) {
+		logError(1, "event(%lu) do not need process\n", val);
+		return 0;
 	}
 
 	if (evdata && evdata->data && info) {
@@ -6870,17 +6845,15 @@ static int fts_drm_state_chg_callback(struct notifier_block *nb,
 		blank = *(int *)(evdata->data);
 		logError(1, "%s %s: val:%lu,blank:%u\n", tag, __func__, val, blank);
 
-		if (val == MI_DISP_DPMS_EARLY_EVENT && (blank == MI_DISP_DPMS_POWERDOWN ||
-			blank == MI_DISP_DPMS_LP1 || blank == MI_DISP_DPMS_LP2)) {
+		if (val == DRM_PANEL_EVENT_BLANK && (blank == DRM_PANEL_BLANK_POWERDOWN)) {
 			if (info->sensor_sleep)
 				return NOTIFY_OK;
 
-			logError(1, "%s %s: FB_BLANK %s\n", tag,
-				 __func__, blank == MI_DISP_DPMS_POWERDOWN ? "POWER DOWN" : "LP");
+			logError(1, "%s %s: FB_BLANK_POWERDOWN\n", tag, __func__);
 
 			flush_workqueue(info->event_wq);
 			queue_work(info->event_wq, &info->suspend_work);
-		} else if (val == MI_DISP_DPMS_EVENT && blank == MI_DISP_DPMS_ON) {
+		} else if (val == DRM_PANEL_EVENT_BLANK && blank == DRM_PANEL_BLANK_UNBLANK) {
 			if (!info->sensor_sleep)
 				return NOTIFY_OK;
 
@@ -7588,6 +7561,35 @@ static int parse_gamemode_dt(struct device *dev, struct fts_hw_platform_data *bd
 }
 #endif
 
+/**
+ * pointer active_panel initlized function, used to checkout panel(config)from devices
+ * tree ,later will be passed to drm_notifyXXX function.
+ * @param device node contains the panel
+ * @return pointer to that panel if panel truely  exists, otherwise negative number
+ */
+static int fts_ts_check_panel(struct device_node *np)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	if (count <= 0)
+		return -ENODEV;
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			active_panel = panel;
+			return 0;
+		}
+	}
+
+	return PTR_ERR(panel);
+}
 /**
  * Retrieve and parse the hw information from the device tree node defined in the system.
  * the most important information to obtain are: IRQ and RESET gpio numbers, power regulator names
@@ -8337,6 +8339,11 @@ static int fts_probe(struct spi_device *client)
 	int res = 0;
 	u8 gesture_cmd[6] = {0xA2, 0x03, 0x00, 0x00, 0x00, 0x03};
 #endif
+#if defined(CONFIG_DRM_PANEL) && defined(CONFIG_OF)
+	error = fts_ts_check_panel(dp);
+	if (error < 0)
+		logError(1, "enter here,no panel in current device node");
+#endif
 	logError(1, "%s %s: driver spi ver: %s\n", tag, __func__,
 		 FTS_TS_DRV_VERSION);
 #ifdef I2C_INTERFACE
@@ -8462,10 +8469,12 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_4;
 	}
 
+#ifdef FTS_FOD_AREA_REPORT
+	mutex_init(&(info->fod_mutex));
+#endif
 	INIT_WORK(&info->resume_work, fts_resume_work);
 	INIT_WORK(&info->suspend_work, fts_suspend_work);
 	INIT_WORK(&info->sleep_work, fts_ts_sleep_work);
-	INIT_WORK(&info->mode_handler_work, fts_mode_handler_work);
 	init_completion(&info->tp_reset_completion);
 #ifdef FTS_XIAOMI_TOUCHFEATURE
 	init_waitqueue_head(&info->wait_queue);
@@ -8742,7 +8751,6 @@ static int fts_probe(struct spi_device *client)
 
 	dev_set_drvdata(info->fts_touch_dev, info);
 #ifdef FTS_FOD_AREA_REPORT
-	mutex_init(&(info->fod_mutex));
 #ifdef CONFIG_FACTORY_BUILD
 	mutex_lock(&info->fod_mutex);
 	res = fts_write(gesture_cmd, ARRAY_SIZE(gesture_cmd));
@@ -8770,10 +8778,6 @@ static int fts_probe(struct spi_device *client)
 			      &dev_attr_ellipse_data.attr);
 	if (error) {
 		logError(1, "%s Error: Failed to create ellipse_data sysfs group!\n", tag);
-	}
-	error = sysfs_create_file(&info->fts_touch_dev->kobj, &dev_attr_fod_status.attr);
-	if (error) {
-		logError(1, "%s ERROR: Failed to create fod_status sysfs group!\n", tag);
 	}
 	info->tp_lockdown_info_proc =
 	    proc_create("tp_lockdown_info", 0444, NULL, &fts_lockdown_info_ops);
@@ -8861,7 +8865,10 @@ ProbeErrorExit_7:
 		kfree(info->dma_buf->wrBuf);
 #endif
 ProbeErrorExit_6:
-	mi_disp_unregister_client(&info->notifier);
+#if defined(CONFIG_DRM)
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &info->notifier);
+#endif
 	input_unregister_device(info->input_dev);
 #ifdef CONFIG_FTS_POWERSUPPLY_CB
 	power_supply_unreg_notifier(&info->power_supply_notifier);
@@ -8932,7 +8939,10 @@ static int fts_remove(struct spi_device *client)
 #ifdef CONFIG_FTS_BL_CB
 	backlight_unregister_notifier(&info->bl_notifier);
 #endif
-	mi_disp_unregister_client(&info->notifier);
+#if defined(CONFIG_DRM)
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &info->notifier);
+#endif
 	/* unregister the device */
 	input_unregister_device(info->input_dev);
 

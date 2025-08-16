@@ -167,6 +167,20 @@ config BUILD_SALT
           This is mostly useful for distributions which want to ensure the
           build is unique between builds. It's safe to leave the default.
 
+config POLLY_CLANG
+	bool "Use Clang Polly optimizations"
+	default y
+	depends on CC_IS_CLANG && $(cc-option, -mllvm -polly)
+	depends on !COMPILE_TEST
+	help
+	  This option enables Clang's polyhedral loop optimizer known as
+	  Polly. Polly is able to optimize various loops throughout the
+	  kernel for cache locality. This requires a Clang toolchain
+	  compiled with support for Polly. More information can be found
+	  from Polly's website:
+
+	    https://polly.llvm.org
+
 config HAVE_KERNEL_GZIP
 	bool
 
@@ -471,6 +485,18 @@ config SCHED_WALT
 	based set of metrics for tasks and runqueues. These metrics can be
 	used to guide task placement as well as task frequency requirements
 	for cpufreq governors.
+
+config OEM_KERNEL
+	bool "Oem kernel code"
+	default y
+	help
+	  This feature will allow oem to add their own changes in kernel code.
+
+config MIHW
+	bool "MI driver"
+	default y
+	help
+	  Mi driver code
 
 config BSD_PROCESS_ACCT
 	bool "BSD Process Accounting"
@@ -2347,3 +2373,6 @@ config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
 
 source "init/Kconfig.gki"
+source "kernel/sched/cpufreq_effiency/Kconfig"
+source "kernel/sched/cpufreq_bouncing/Kconfig"
+source "kernel/sched/special_opt/Kconfig"

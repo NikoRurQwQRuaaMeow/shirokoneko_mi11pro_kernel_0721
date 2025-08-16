@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -753,23 +752,25 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 /* set audio task affinity to core 1 & 2 */
 static const unsigned int audio_core_list[] = {1, 2};
 static cpumask_t audio_cpu_map = CPU_MASK_NONE;
-static struct dev_pm_qos_request *msm_audio_req;
-static unsigned int qos_client_active_cnt;
+static struct dev_pm_qos_request *msm_audio_req = NULL;
+static unsigned int qos_client_active_cnt = 0;
 
-static void msm_audio_add_qos_request(void)
+static void msm_audio_add_qos_request()
 {
 	int i;
 	int cpu = 0;
 
-	msm_audio_req = kcalloc(num_possible_cpus(),
-		sizeof(struct dev_pm_qos_request), GFP_KERNEL);
-	if (!msm_audio_req)
+	msm_audio_req = kzalloc(sizeof(struct dev_pm_qos_request) * NR_CPUS,
+				 GFP_KERNEL);
+	if (!msm_audio_req) {
+		pr_err("%s failed to alloc mem for qos req.\n", __func__);
 		return;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(audio_core_list); i++) {
-		if (audio_core_list[i] >= num_possible_cpus())
+		if (audio_core_list[i] >= NR_CPUS)
 			pr_err("%s incorrect cpu id: %d specified.\n",
-				__func__, audio_core_list[i]);
+				 __func__, audio_core_list[i]);
 		else
 			cpumask_set_cpu(audio_core_list[i], &audio_cpu_map);
 	}
@@ -783,7 +784,7 @@ static void msm_audio_add_qos_request(void)
 	}
 }
 
-static void msm_audio_remove_qos_request(void)
+static void msm_audio_remove_qos_request()
 {
 	int cpu = 0;
 
@@ -792,7 +793,7 @@ static void msm_audio_remove_qos_request(void)
 			dev_pm_qos_remove_request(
 				&msm_audio_req[cpu]);
 			pr_debug("%s remove cpu affinity of core %d.\n",
-				__func__, cpu);
+				 __func__, cpu);
 		}
 		kfree(msm_audio_req);
 	}
@@ -807,7 +808,7 @@ static void msm_audio_update_qos_request(u32 latency)
 			dev_pm_qos_update_request(
 				&msm_audio_req[cpu], latency);
 			pr_debug("%s update latency of core %d to %ul.\n",
-				__func__, cpu, latency);
+				 __func__, cpu, latency);
 		}
 	}
 }
@@ -2431,8 +2432,7 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int port_id = 0;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 
 	port_id = msm_get_port_id(rtd->dai_link->id);
 	if (port_id < 0) {
@@ -4369,8 +4369,7 @@ void mi2s_disable_audio_vote(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int sample_rate = 0;
@@ -4404,8 +4403,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (cpu_dai->id) / 2;
+	int index = cpu_dai->id;
 	unsigned int fmt = SND_SOC_DAIFMT_CBS_CFS;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
@@ -4459,8 +4457,10 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	if (++mi2s_intf_conf[index].ref_cnt == 1) {
 		/* Check if msm needs to provide the clock to the interface */
-		if (!mi2s_intf_conf[index].msm_is_mi2s_master)
+		if (!mi2s_intf_conf[index].msm_is_mi2s_master) {
 			mi2s_clk[index].clk_id = mi2s_ebit_clk[index];
+			fmt = SND_SOC_DAIFMT_CBM_CFM;
+		}
 		ret = msm_mi2s_set_sclk(substream, true);
 		if (ret < 0) {
 			dev_err(rtd->card->dev,
@@ -4469,6 +4469,12 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			goto clean_up;
 		}
 
+		ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
+		if (ret < 0) {
+			pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
+				__func__, index, ret);
+			goto clk_off;
+		}
 		if (pdata->mi2s_gpio_p[index]) {
 			if (atomic_read(&(pdata->mi2s_gpio_ref_count[index]))
 									== 0) {
@@ -4482,14 +4488,6 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			}
 			atomic_inc(&(pdata->mi2s_gpio_ref_count[index]));
 		}
-	}
-	if (!mi2s_intf_conf[index].msm_is_mi2s_master)
-		fmt = SND_SOC_DAIFMT_CBM_CFM;
-	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
-	if (ret < 0) {
-		pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
-			__func__, index, ret);
-		goto clk_off;
 	}
 clk_off:
 	if (ret < 0)
@@ -4509,8 +4507,7 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	/* Rx and Tx DAIs should use same clk index */
-	int index = (rtd->cpu_dai->id) / 2;
+	int index = rtd->cpu_dai->id;
 	struct snd_soc_card *card = rtd->card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 

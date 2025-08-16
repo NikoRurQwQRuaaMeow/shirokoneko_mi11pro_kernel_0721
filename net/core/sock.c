@@ -702,8 +702,7 @@ bool sk_mc_loop(struct sock *sk)
 		return false;
 	if (!sk)
 		return true;
-	/* IPV6_ADDRFORM can change sk->sk_family under us. */
-	switch (READ_ONCE(sk->sk_family)) {
+	switch (sk->sk_family) {
 	case AF_INET:
 		return inet_sk(sk)->mc_loop;
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1119,8 +1118,7 @@ set_rcvbuf:
 			cmpxchg(&sk->sk_pacing_status,
 				SK_PACING_NONE,
 				SK_PACING_NEEDED);
-		/* Pairs with READ_ONCE() from sk_getsockopt() */
-		WRITE_ONCE(sk->sk_max_pacing_rate, ulval);
+		sk->sk_max_pacing_rate = ulval;
 		sk->sk_pacing_rate = min(sk->sk_pacing_rate, ulval);
 		break;
 		}
@@ -1260,11 +1258,11 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		break;
 
 	case SO_SNDBUF:
-		v.val = READ_ONCE(sk->sk_sndbuf);
+		v.val = sk->sk_sndbuf;
 		break;
 
 	case SO_RCVBUF:
-		v.val = READ_ONCE(sk->sk_rcvbuf);
+		v.val = sk->sk_rcvbuf;
 		break;
 
 	case SO_REUSEADDR:
@@ -1352,7 +1350,7 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		break;
 
 	case SO_RCVLOWAT:
-		v.val = READ_ONCE(sk->sk_rcvlowat);
+		v.val = sk->sk_rcvlowat;
 		break;
 
 	case SO_SNDLOWAT:
@@ -1446,7 +1444,7 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		if (!sock->ops->set_peek_off)
 			return -EOPNOTSUPP;
 
-		v.val = READ_ONCE(sk->sk_peek_off);
+		v.val = sk->sk_peek_off;
 		break;
 	case SO_NOFCS:
 		v.val = sock_flag(sk, SOCK_NOFCS);
@@ -1476,19 +1474,17 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	case SO_BUSY_POLL:
-		v.val = READ_ONCE(sk->sk_ll_usec);
+		v.val = sk->sk_ll_usec;
 		break;
 #endif
 
 	case SO_MAX_PACING_RATE:
-		/* The READ_ONCE() pair with the WRITE_ONCE() in sk_setsockopt() */
 		if (sizeof(v.ulval) != sizeof(v.val) && len >= sizeof(v.ulval)) {
 			lv = sizeof(v.ulval);
-			v.ulval = READ_ONCE(sk->sk_max_pacing_rate);
+			v.ulval = sk->sk_max_pacing_rate;
 		} else {
 			/* 32bit version */
-			v.val = min_t(unsigned long, ~0U,
-				      READ_ONCE(sk->sk_max_pacing_rate));
+			v.val = min_t(unsigned long, sk->sk_max_pacing_rate, ~0U);
 		}
 		break;
 
@@ -1947,6 +1943,7 @@ void sk_setup_caps(struct sock *sk, struct dst_entry *dst)
 {
 	u32 max_segs = 1;
 
+	sk_dst_set(sk, dst);
 	sk->sk_route_caps = dst->dev->features | sk->sk_route_forced_caps;
 	if (sk->sk_route_caps & NETIF_F_GSO)
 		sk->sk_route_caps |= NETIF_F_GSO_SOFTWARE;
@@ -1961,7 +1958,6 @@ void sk_setup_caps(struct sock *sk, struct dst_entry *dst)
 		}
 	}
 	sk->sk_gso_max_segs = max_segs;
-	sk_dst_set(sk, dst);
 }
 EXPORT_SYMBOL_GPL(sk_setup_caps);
 
@@ -2094,24 +2090,13 @@ kuid_t sock_i_uid(struct sock *sk)
 }
 EXPORT_SYMBOL(sock_i_uid);
 
-unsigned long __sock_i_ino(struct sock *sk)
-{
-	unsigned long ino;
-
-	read_lock(&sk->sk_callback_lock);
-	ino = sk->sk_socket ? SOCK_INODE(sk->sk_socket)->i_ino : 0;
-	read_unlock(&sk->sk_callback_lock);
-	return ino;
-}
-EXPORT_SYMBOL(__sock_i_ino);
-
 unsigned long sock_i_ino(struct sock *sk)
 {
 	unsigned long ino;
 
-	local_bh_disable();
-	ino = __sock_i_ino(sk);
-	local_bh_enable();
+	read_lock_bh(&sk->sk_callback_lock);
+	ino = sk->sk_socket ? SOCK_INODE(sk->sk_socket)->i_ino : 0;
+	read_unlock_bh(&sk->sk_callback_lock);
 	return ino;
 }
 EXPORT_SYMBOL(sock_i_ino);
@@ -2228,9 +2213,9 @@ static long sock_wait_for_wmem(struct sock *sk, long timeo)
 		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
 		if (refcount_read(&sk->sk_wmem_alloc) < READ_ONCE(sk->sk_sndbuf))
 			break;
-		if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
+		if (sk->sk_shutdown & SEND_SHUTDOWN)
 			break;
-		if (READ_ONCE(sk->sk_err))
+		if (sk->sk_err)
 			break;
 		timeo = schedule_timeout(timeo);
 	}
@@ -2258,7 +2243,7 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 			goto failure;
 
 		err = -EPIPE;
-		if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
+		if (sk->sk_shutdown & SEND_SHUTDOWN)
 			goto failure;
 
 		if (sk_wmem_alloc_get(sk) < READ_ONCE(sk->sk_sndbuf))
@@ -2637,7 +2622,7 @@ void __sk_mem_reduce_allocated(struct sock *sk, int amount)
 	if (mem_cgroup_sockets_enabled && sk->sk_memcg)
 		mem_cgroup_uncharge_skmem(sk->sk_memcg, amount);
 
-	if (sk_under_global_memory_pressure(sk) &&
+	if (sk_under_memory_pressure(sk) &&
 	    (sk_memory_allocated(sk) < sk_prot_mem_limits(sk, 0)))
 		sk_leave_memory_pressure(sk);
 }
@@ -2658,7 +2643,7 @@ EXPORT_SYMBOL(__sk_mem_reclaim);
 
 int sk_set_peek_off(struct sock *sk, int val)
 {
-	WRITE_ONCE(sk->sk_peek_off, val);
+	sk->sk_peek_off = val;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(sk_set_peek_off);
@@ -2902,14 +2887,7 @@ void sk_stop_timer(struct sock *sk, struct timer_list* timer)
 }
 EXPORT_SYMBOL(sk_stop_timer);
 
-void sk_stop_timer_sync(struct sock *sk, struct timer_list *timer)
-{
-	if (del_timer_sync(timer))
-		__sock_put(sk);
-}
-EXPORT_SYMBOL(sk_stop_timer_sync);
-
-void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
+void sock_init_data(struct socket *sock, struct sock *sk)
 {
 	sk_init_common(sk);
 	sk->sk_send_head	=	NULL;
@@ -2928,10 +2906,11 @@ void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
 		sk->sk_type	=	sock->type;
 		RCU_INIT_POINTER(sk->sk_wq, &sock->wq);
 		sock->sk	=	sk;
+		sk->sk_uid	=	SOCK_INODE(sock)->i_uid;
 	} else {
 		RCU_INIT_POINTER(sk->sk_wq, NULL);
+		sk->sk_uid	=	make_kuid(sock_net(sk)->user_ns, 0);
 	}
-	sk->sk_uid	=	uid;
 
 	rwlock_init(&sk->sk_callback_lock);
 	if (sk->sk_kern_sock)
@@ -2988,16 +2967,6 @@ void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
 	smp_wmb();
 	refcount_set(&sk->sk_refcnt, 1);
 	atomic_set(&sk->sk_drops, 0);
-}
-EXPORT_SYMBOL(sock_init_data_uid);
-
-void sock_init_data(struct socket *sock, struct sock *sk)
-{
-	kuid_t uid = sock ?
-		SOCK_INODE(sock)->i_uid :
-		make_kuid(sock_net(sk)->user_ns, 0);
-
-	sock_init_data_uid(sock, sk, uid);
 }
 EXPORT_SYMBOL(sock_init_data);
 

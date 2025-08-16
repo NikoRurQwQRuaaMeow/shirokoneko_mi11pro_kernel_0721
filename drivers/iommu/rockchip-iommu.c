@@ -1230,20 +1230,18 @@ static int rk_iommu_probe(struct platform_device *pdev)
 	for (i = 0; i < iommu->num_irq; i++) {
 		int irq = platform_get_irq(pdev, i);
 
-		if (irq < 0) {
-			err = irq;
-			goto err_pm_disable;
-		}
+		if (irq < 0)
+			return irq;
 
 		err = devm_request_irq(iommu->dev, irq, rk_iommu_irq,
 				       IRQF_SHARED, dev_name(dev), iommu);
-		if (err)
-			goto err_pm_disable;
+		if (err) {
+			pm_runtime_disable(dev);
+			goto err_remove_sysfs;
+		}
 	}
 
 	return 0;
-err_pm_disable:
-	pm_runtime_disable(dev);
 err_remove_sysfs:
 	iommu_device_sysfs_remove(&iommu->iommu);
 err_put_group:

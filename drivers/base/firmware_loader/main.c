@@ -90,7 +90,6 @@ static inline struct fw_priv *to_fw_priv(struct kref *ref)
 DEFINE_MUTEX(fw_lock);
 
 static struct firmware_cache fw_cache;
-bool fw_load_abort_all;
 
 /* Builtin firmware support */
 
@@ -449,7 +448,8 @@ static const char * const fw_path[] = {
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
-	"/lib/firmware"
+	"/lib/firmware",
+	"/vendor/firmware"
 };
 
 /*
@@ -1364,10 +1364,10 @@ static int fw_pm_notify(struct notifier_block *notify_block,
 	case PM_SUSPEND_PREPARE:
 	case PM_RESTORE_PREPARE:
 		/*
-		 * Here, kill pending fallback requests will only kill
-		 * non-uevent firmware request to avoid stalling suspend.
+		 * kill pending fallback requests with a custom fallback
+		 * to avoid stalling suspend.
 		 */
-		kill_pending_fw_fallback_reqs(false);
+		kill_pending_fw_fallback_reqs(true);
 		device_cache_fw_images();
 		break;
 
@@ -1453,7 +1453,7 @@ static int fw_shutdown_notify(struct notifier_block *unused1,
 	 * Kill all pending fallback requests to avoid both stalling shutdown,
 	 * and avoid a deadlock with the usermode_lock.
 	 */
-	kill_pending_fw_fallback_reqs(true);
+	kill_pending_fw_fallback_reqs(false);
 
 	return NOTIFY_DONE;
 }

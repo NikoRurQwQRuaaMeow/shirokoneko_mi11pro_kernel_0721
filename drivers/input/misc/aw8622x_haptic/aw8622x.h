@@ -191,7 +191,7 @@ struct aw8622x_dts_info {
 	unsigned int trig_config[24];
 	unsigned int effect_id_boundary;
 	unsigned int effect_max;
-	unsigned int rtp_time[194];
+    unsigned int rtp_time[175];
 	bool is_enabled_powerup_f0_cali;
 	bool is_enabled_auto_bst;
 };

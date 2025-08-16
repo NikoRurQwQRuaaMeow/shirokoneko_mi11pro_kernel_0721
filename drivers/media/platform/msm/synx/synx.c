@@ -870,8 +870,7 @@ int synx_bind(struct synx_session session_id,
 		mutex_lock(&synx_obj->obj_lock);
 		memset(&synx_obj->bound_synxs[bound_idx], 0,
 			sizeof(struct synx_external_desc));
-		if (synx_obj->num_bound_synxs)
-			synx_obj->num_bound_synxs--;
+		synx_obj->num_bound_synxs--;
 		goto free;
 	}
 

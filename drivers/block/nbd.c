@@ -1609,7 +1609,7 @@ static int nbd_dev_dbg_init(struct nbd_device *nbd)
 		return -EIO;
 
 	dir = debugfs_create_dir(nbd_name(nbd), nbd_dbg_dir);
-	if (IS_ERR(dir)) {
+	if (!dir) {
 		dev_err(nbd_to_dev(nbd), "Failed to create debugfs dir for '%s'\n",
 			nbd_name(nbd));
 		return -EIO;
@@ -1635,7 +1635,7 @@ static int nbd_dbg_init(void)
 	struct dentry *dbg_dir;
 
 	dbg_dir = debugfs_create_dir("nbd", NULL);
-	if (IS_ERR(dbg_dir))
+	if (!dbg_dir)
 		return -EIO;
 
 	nbd_dbg_dir = dbg_dir;
@@ -1708,8 +1708,7 @@ static int nbd_dev_add(int index)
 		if (err == -ENOSPC)
 			err = -EEXIST;
 	} else {
-		err = idr_alloc(&nbd_index_idr, nbd, 0,
-				(MINORMASK >> part_shift) + 1, GFP_KERNEL);
+		err = idr_alloc(&nbd_index_idr, nbd, 0, 0, GFP_KERNEL);
 		if (err >= 0)
 			index = err;
 	}

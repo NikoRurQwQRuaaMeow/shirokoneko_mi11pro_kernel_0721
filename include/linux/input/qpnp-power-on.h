@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2015, 2017-2019, The Linux Foundation.
- * Copyright (C) 2021 XiaoMi, Inc.
  * All rights reserved.
  */
 
@@ -107,11 +106,6 @@ static inline int qpnp_pon_modem_pwr_off(enum pon_power_off_type type)
 	return -ENODEV;
 }
 
-#endif
-
-#ifdef CONFIG_MTD_BLOCK2MTD
-extern struct Scsi_Host *g_shost;
-extern void machine_restart(char *cmd);
 #endif
 
 #endif

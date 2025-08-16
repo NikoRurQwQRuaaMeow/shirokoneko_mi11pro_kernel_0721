@@ -405,10 +405,7 @@ static void htb_activate_prios(struct htb_sched *q, struct htb_class *cl)
 	while (cl->cmode == HTB_MAY_BORROW && p && mask) {
 		m = mask;
 		while (m) {
-			unsigned int prio = ffz(~m);
-
-			if (WARN_ON_ONCE(prio >= ARRAY_SIZE(p->inner.clprio)))
-				break;
+			int prio = ffz(~m);
 			m &= ~(1 << prio);
 
 			if (p->inner.clprio[prio].feed.rb_node)
@@ -582,7 +579,7 @@ static inline void htb_deactivate(struct htb_sched *q, struct htb_class *cl)
 static int htb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		       struct sk_buff **to_free)
 {
-	int ret;
+	int uninitialized_var(ret);
 	unsigned int len = qdisc_pkt_len(skb);
 	struct htb_sched *q = qdisc_priv(sch);
 	struct htb_class *cl = htb_classify(skb, sch, &ret);

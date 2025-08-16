@@ -2649,26 +2649,6 @@ struct dentry *lookup_one_len_unlocked(const char *name,
 }
 EXPORT_SYMBOL(lookup_one_len_unlocked);
 
-/*
- * Like lookup_one_len_unlocked(), except that it yields ERR_PTR(-ENOENT)
- * on negatives.  Returns known positive or ERR_PTR(); that's what
- * most of the users want.  Note that pinned negative with unlocked parent
- * _can_ become positive at any time, so callers of lookup_one_len_unlocked()
- * need to be very careful; pinned positives have ->d_inode stable, so
- * this one avoids such problems.
- */
-struct dentry *lookup_positive_unlocked(const char *name,
-				       struct dentry *base, int len)
-{
-	struct dentry *ret = lookup_one_len_unlocked(name, base, len);
-	if (!IS_ERR(ret) && d_is_negative(ret)) {
-		dput(ret);
-		ret = ERR_PTR(-ENOENT);
-	}
-	return ret;
-}
-EXPORT_SYMBOL(lookup_positive_unlocked);
-
 #ifdef CONFIG_UNIX98_PTYS
 int path_pts(struct path *path)
 {
@@ -2687,7 +2667,7 @@ int path_pts(struct path *path)
 	this.name = "pts";
 	this.len = 3;
 	child = d_hash_and_lookup(parent, &this);
-	if (IS_ERR_OR_NULL(child))
+	if (!child)
 		return -ENOENT;
 
 	path->dentry = child;
@@ -2974,8 +2954,8 @@ struct dentry *lock_rename(struct dentry *p1, struct dentry *p2)
 		return p;
 	}
 
-	lock_two_inodes(p1->d_inode, p2->d_inode,
-			I_MUTEX_PARENT, I_MUTEX_PARENT2);
+	inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
+	inode_lock_nested(p2->d_inode, I_MUTEX_PARENT2);
 	return NULL;
 }
 EXPORT_SYMBOL(lock_rename);
@@ -4471,7 +4451,7 @@ SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname
  *	   sb->s_vfs_rename_mutex. We might be more accurate, but that's another
  *	   story.
  *	c) we have to lock _four_ objects - parents and victim (if it exists),
- *	   and source.
+ *	   and source (if it is not a directory).
  *	   And that - after we got ->i_mutex on parents (until then we don't know
  *	   whether the target exists).  Solution: try to be smart with locking
  *	   order for inodes.  We rely on the fact that tree topology may change
@@ -4548,16 +4528,10 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	take_dentry_name_snapshot(&old_name, old_dentry);
 	dget(new_dentry);
-	/*
-	 * Lock all moved children. Moved directories may need to change parent
-	 * pointer so they need the lock to prevent against concurrent
-	 * directory changes moving parent pointer. For regular files we've
-	 * historically always done this. The lockdep locking subclasses are
-	 * somewhat arbitrary but RENAME_EXCHANGE in particular can swap
-	 * regular files and directories so it's difficult to tell which
-	 * subclasses to use.
-	 */
-	lock_two_inodes(source, target, I_MUTEX_NORMAL, I_MUTEX_NONDIR2);
+	if (!is_dir || (flags & RENAME_EXCHANGE))
+		lock_two_nondirectories(source, target);
+	else if (target)
+		inode_lock(target);
 
 	error = -EBUSY;
 	if (is_local_mountpoint(old_dentry) || is_local_mountpoint(new_dentry))
@@ -4601,8 +4575,9 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			d_exchange(old_dentry, new_dentry);
 	}
 out:
-	inode_unlock(source);
-	if (target)
+	if (!is_dir || (flags & RENAME_EXCHANGE))
+		unlock_two_nondirectories(source, target);
+	else if (target)
 		inode_unlock(target);
 	dput(new_dentry);
 	if (!error) {

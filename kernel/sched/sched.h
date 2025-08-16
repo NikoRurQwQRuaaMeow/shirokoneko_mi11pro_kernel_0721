@@ -124,6 +124,12 @@ struct walt_task_group {
 	bool colocate;
 	/* Controls whether further updates are allowed to the colocate flag */
 	bool colocate_update_disabled;
+#if defined(CONFIG_UCLAMP_TASK_GROUP) && defined(CONFIG_SCHED_WALT)
+	unsigned int window_policy;
+	bool discount_wait_time;
+	bool top_task_filter;
+	bool ed_task_filter;
+#endif
 };
 
 struct walt_root_domain {
@@ -529,7 +535,6 @@ struct task_group {
 	struct walt_task_group	wtg;
 #endif /* CONFIG_SCHED_WALT */
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
-
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -1490,7 +1495,7 @@ extern void sched_ttwu_pending(void);
  */
 #define for_each_domain(cpu, __sd) \
 	for (__sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd); \
-			__sd; __sd = __sd->parent)
+			__sd; __sd = rcu_dereference(__sd->parent))
 
 /**
  * highest_flag_domain - Return highest sched_domain containing flag.
@@ -2559,6 +2564,7 @@ extern void cfs_bandwidth_usage_dec(void);
 
 #define nohz_flags(cpu)	(&cpu_rq(cpu)->nohz_flags)
 
+extern cpumask_t cpu_wclaimed_mask;
 extern void nohz_balance_exit_idle(struct rq *rq);
 #else
 static inline void nohz_balance_exit_idle(struct rq *rq) { }

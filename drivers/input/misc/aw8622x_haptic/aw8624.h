@@ -205,7 +205,7 @@ struct aw8624_dts_info {
 	unsigned int gain_flag;
 	unsigned int effect_id_boundary;
 	unsigned int effect_max;
-	unsigned int rtp_time[194];
+	unsigned int rtp_time[175];
 	unsigned int trig_config[3][5];
 };
 

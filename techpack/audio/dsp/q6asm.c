@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -122,10 +122,10 @@ static void q6asm_add_hdr_custom_topology(struct audio_client *ac,
 					  uint32_t pkt_size);
 static void q6asm_add_hdr_async(struct audio_client *ac, struct apr_hdr *hdr,
 			uint32_t pkt_size, uint32_t cmd_flg);
-static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
+int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 				uint32_t bufsz, uint32_t bufcnt,
 				bool is_contiguous);
-static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir);
+int q6asm_memory_unmap_regions(struct audio_client *ac, int dir);
 static void q6asm_reset_buf_state(struct audio_client *ac);
 
 void *q6asm_mmap_apr_reg(void);
@@ -2359,7 +2359,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 			}
 			if ( data->payload_size >= 2 * sizeof(uint32_t) &&
 				(lower_32_bits(port->buf[buf_index].phys) !=
-				payload[0] || 
+				payload[0] ||
 				msm_audio_populate_upper_32_bits(
 					port->buf[buf_index].phys) != payload[1])) {
 				pr_debug("%s: Expected addr %pK\n",
@@ -2435,15 +2435,6 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 
 		config_debug_fs_read_cb();
 
-		if (data->payload_size != (READDONE_IDX_SEQ_ID + 1) * sizeof(uint32_t)) {
-			pr_err("%s:  payload size of %d is less than expected %d.\n",
-					__func__, data->payload_size,
-					((READDONE_IDX_SEQ_ID + 1) * sizeof(uint32_t)));
-			spin_unlock_irqrestore(
-				&(session[session_id].session_lock),
-				flags);
-			return -EINVAL;
-		}
 		dev_vdbg(ac->dev, "%s: ReadDone: status=%d buff_add=0x%x act_size=%d offset=%d\n",
 				__func__, payload[READDONE_IDX_STATUS],
 				payload[READDONE_IDX_BUFADD_LSW],
@@ -2551,16 +2542,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 				__func__, data->payload_size);
 		break;
 	case ASM_SESSION_CMDRSP_GET_MTMX_STRTR_PARAMS_V2:
-		payload_size = sizeof(struct asm_mtmx_strtr_get_params_cmdrsp);
-		if (data->payload_size < payload_size) {
-			pr_err("%s: insufficient payload size = %d\n",
-				__func__, data->payload_size);
-			spin_unlock_irqrestore(
-				&(session[session_id].session_lock), flags);
-			return -EINVAL;
-		}
-		q6asm_process_mtmx_get_param_rsp(ac,
-			(struct asm_mtmx_strtr_get_params_cmdrsp *) payload);
+		q6asm_process_mtmx_get_param_rsp(ac, (void *) payload);
 		break;
 	case ASM_STREAM_PP_EVENT:
 	case ASM_STREAM_CMD_ENCDEC_EVENTS:
@@ -5373,7 +5355,7 @@ EXPORT_SYMBOL(q6asm_set_encdec_chan_map);
  * @endianness: endianness of the pcm data
  * @mode: Mode to provide additional info about the pcm input data
  */
-static int q6asm_enc_cfg_blk_pcm_v5(struct audio_client *ac,
+int q6asm_enc_cfg_blk_pcm_v5(struct audio_client *ac,
 			     uint32_t rate, uint32_t channels,
 			     uint16_t bits_per_sample, bool use_default_chmap,
 			     bool use_back_flavor, u8 *channel_map,
@@ -7417,11 +7399,13 @@ static int __q6asm_media_format_block_multi_ch_pcm_v5(struct audio_client *ac,
 		memcpy(channel_mapping, channel_map,
 			 PCM_FORMAT_MAX_NUM_CHANNEL_V8);
 	}
+	pr_debug("%s: chnl map %d, %d, %d, %d\n",  __func__,
+		channel_mapping[0], channel_mapping[1], channel_mapping[2], channel_mapping[3]);
 
 	if (fmt.param.num_channels==2) {
 		if (channel_mapping[0] == 0 || channel_mapping[1] ==0) {
 			pr_err("%s: chnl map wrong %d, %d\n", __func__,
-				channel_mapping[0], channel_mapping[1]);
+			channel_mapping[0], channel_mapping[1]);
 			channel_mapping[0] = 1;
 			channel_mapping[1] = 2;
 		}
@@ -8789,7 +8773,7 @@ EXPORT_SYMBOL(q6asm_memory_unmap);
  *
  * Returns 0 on success or error on failure
  */
-static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
+int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 				uint32_t bufsz, uint32_t bufcnt,
 				bool is_contiguous)
 {
@@ -8944,7 +8928,7 @@ fail_cmd:
  *
  * Returns 0 on success or error on failure
  */
-static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
+int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
 {
 	struct avs_cmd_shared_mem_unmap_regions mem_unmap;
 	struct audio_port_data *port = NULL;
@@ -11420,7 +11404,7 @@ static int q6asm_get_asm_topology_apptype(struct q6asm_cal_info *cal_info, struc
 unlock:
 	mutex_unlock(&cal_data[ASM_TOPOLOGY_CAL]->lock);
 done:
-	pr_debug("%s: Using topology %d app_type %d\n", __func__,
+	pr_err("%s: Using topology %d app_type %d\n", __func__,
 			cal_info->topology_id, cal_info->app_type);
 
 	return 0;

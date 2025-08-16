@@ -717,15 +717,14 @@ netdev_tx_t wilc_mac_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	if (skb->dev != ndev) {
 		netdev_err(ndev, "Packet not destined to this device\n");
-		dev_kfree_skb(skb);
-		return NETDEV_TX_OK;
+		return 0;
 	}
 
 	tx_data = kmalloc(sizeof(*tx_data), GFP_ATOMIC);
 	if (!tx_data) {
 		dev_kfree_skb(skb);
 		netif_wake_queue(ndev);
-		return NETDEV_TX_OK;
+		return 0;
 	}
 
 	tx_data->buff = skb->data;
@@ -749,7 +748,7 @@ netdev_tx_t wilc_mac_xmit(struct sk_buff *skb, struct net_device *ndev)
 		mutex_unlock(&wilc->vif_mutex);
 	}
 
-	return NETDEV_TX_OK;
+	return 0;
 }
 
 static int wilc_mac_close(struct net_device *ndev)

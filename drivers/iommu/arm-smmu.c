@@ -3299,6 +3299,9 @@ static size_t arm_smmu_unmap(struct iommu_domain *domain, unsigned long iova,
 	arm_smmu_rpm_get(smmu);
 	spin_lock_irqsave(&smmu_domain->cb_lock, flags);
 	ret = ops->unmap(ops, iova, size, gather);
+#ifdef CONFIG_MACH_XIAOMI
+	arm_smmu_deferred_flush(smmu_domain);
+#endif
 	spin_unlock_irqrestore(&smmu_domain->cb_lock, flags);
 	arm_smmu_rpm_put(smmu);
 
@@ -3416,6 +3419,9 @@ static size_t arm_smmu_map_sg(struct iommu_domain *domain, unsigned long iova,
 			spin_lock_irqsave(&smmu_domain->cb_lock, flags);
 			list_splice_init(&nonsecure_pool,
 					 &smmu_domain->nonsecure_pool);
+#ifdef CONFIG_MACH_XIAOMI
+			arm_smmu_deferred_flush(smmu_domain);
+#endif
 			ret = pgtbl_info->map_sg(ops, iova, sg_start,
 						 idx_end - idx_start, prot,
 						 &size);
@@ -5292,6 +5298,7 @@ static struct platform_driver qsmmuv500_tbu_driver = {
 	.driver	= {
 		.name		= "qsmmuv500-tbu",
 		.of_match_table	= of_match_ptr(qsmmuv500_tbu_of_match),
+		.probe_type	= PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe	= qsmmuv500_tbu_probe,
 	.remove = qsmmuv500_tbu_remove,

@@ -188,12 +188,8 @@ static void essiv_aead_done(struct crypto_async_request *areq, int err)
 	struct aead_request *req = areq->data;
 	struct essiv_aead_request_ctx *rctx = aead_request_ctx(req);
 
-	if (err == -EINPROGRESS)
-		goto out;
-
-	kfree(rctx->assoc);
-
-out:
+	if (rctx->assoc)
+		kfree(rctx->assoc);
 	aead_request_complete(req, err);
 }
 
@@ -269,7 +265,7 @@ static int essiv_aead_crypt(struct aead_request *req, bool enc)
 	err = enc ? crypto_aead_encrypt(subreq) :
 		    crypto_aead_decrypt(subreq);
 
-	if (rctx->assoc && err != -EINPROGRESS && err != -EBUSY)
+	if (rctx->assoc && err != -EINPROGRESS)
 		kfree(rctx->assoc);
 	return err;
 }
@@ -490,7 +486,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 	type = algt->type & algt->mask;
 
 	switch (type) {
-	case CRYPTO_ALG_TYPE_BLKCIPHER:
+	case CRYPTO_ALG_TYPE_SKCIPHER:
 		skcipher_inst = kzalloc(sizeof(*skcipher_inst) +
 					sizeof(*ictx), GFP_KERNEL);
 		if (!skcipher_inst)
@@ -590,7 +586,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 	base->cra_alignmask	= block_base->cra_alignmask;
 	base->cra_priority	= block_base->cra_priority;
 
-	if (type == CRYPTO_ALG_TYPE_BLKCIPHER) {
+	if (type == CRYPTO_ALG_TYPE_SKCIPHER) {
 		skcipher_inst->alg.setkey	= essiv_skcipher_setkey;
 		skcipher_inst->alg.encrypt	= essiv_skcipher_encrypt;
 		skcipher_inst->alg.decrypt	= essiv_skcipher_decrypt;
@@ -632,7 +628,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 out_free_hash:
 	crypto_mod_put(_hash_alg);
 out_drop_skcipher:
-	if (type == CRYPTO_ALG_TYPE_BLKCIPHER)
+	if (type == CRYPTO_ALG_TYPE_SKCIPHER)
 		crypto_drop_skcipher(&ictx->u.skcipher_spawn);
 	else
 		crypto_drop_aead(&ictx->u.aead_spawn);

@@ -1002,6 +1002,7 @@ struct file {
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
 	errseq_t		f_wb_err;
+	errseq_t		f_sb_err; /* for syncfs */
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_VENDOR_DATA(1);
@@ -1404,33 +1405,34 @@ extern int send_sigurg(struct fown_struct *fown);
  * sb->s_flags.  Note that these mirror the equivalent MS_* flags where
  * represented in both.
  */
-#define SB_RDONLY       BIT(0)	/* Mount read-only */
-#define SB_NOSUID       BIT(1)	/* Ignore suid and sgid bits */
-#define SB_NODEV        BIT(2)	/* Disallow access to device special files */
-#define SB_NOEXEC       BIT(3)	/* Disallow program execution */
-#define SB_SYNCHRONOUS  BIT(4)	/* Writes are synced at once */
-#define SB_MANDLOCK     BIT(6)	/* Allow mandatory locks on an FS */
-#define SB_DIRSYNC      BIT(7)	/* Directory modifications are synchronous */
-#define SB_NOATIME      BIT(10)	/* Do not update access times. */
-#define SB_NODIRATIME   BIT(11)	/* Do not update directory access times */
-#define SB_SILENT       BIT(15)
-#define SB_POSIXACL     BIT(16)	/* VFS does not apply the umask */
-#define SB_KERNMOUNT    BIT(22)	/* this is a kern_mount call */
-#define SB_I_VERSION    BIT(23)	/* Update inode I_version field */
-#define SB_LAZYTIME     BIT(25)	/* Update the on-disk [acm]times lazily */
+#define SB_RDONLY	 1	/* Mount read-only */
+#define SB_NOSUID	 2	/* Ignore suid and sgid bits */
+#define SB_NODEV	 4	/* Disallow access to device special files */
+#define SB_NOEXEC	 8	/* Disallow program execution */
+#define SB_SYNCHRONOUS	16	/* Writes are synced at once */
+#define SB_MANDLOCK	64	/* Allow mandatory locks on an FS */
+#define SB_DIRSYNC	128	/* Directory modifications are synchronous */
+#define SB_NOATIME	1024	/* Do not update access times. */
+#define SB_NODIRATIME	2048	/* Do not update directory access times */
+#define SB_SILENT	32768
+#define SB_POSIXACL	(1<<16)	/* VFS does not apply the umask */
+#define SB_INLINECRYPT	(1<<17)	/* Use blk-crypto for encrypted files */
+#define SB_KERNMOUNT	(1<<22) /* this is a kern_mount call */
+#define SB_I_VERSION	(1<<23) /* Update inode I_version field */
+#define SB_LAZYTIME	(1<<25) /* Update the on-disk [acm]times lazily */
 
 /* These sb flags are internal to the kernel */
-#define SB_SUBMOUNT     BIT(26)
-#define SB_FORCE        BIT(27)
-#define SB_NOSEC        BIT(28)
-#define SB_BORN         BIT(29)
-#define SB_ACTIVE       BIT(30)
-#define SB_NOUSER       BIT(31)
+#define SB_SUBMOUNT     (1<<26)
+#define SB_FORCE    	(1<<27)
+#define SB_NOSEC	(1<<28)
+#define SB_BORN		(1<<29)
+#define SB_ACTIVE	(1<<30)
+#define SB_NOUSER	(1<<31)
 
 /* These flags relate to encoding and casefolding */
 #define SB_ENC_STRICT_MODE_FL	(1 << 0)
 
-#define sb_has_enc_strict_mode(sb) \
+#define sb_has_strict_encoding(sb) \
 	(sb->s_encoding_flags & SB_ENC_STRICT_MODE_FL)
 
 /*
@@ -1568,6 +1570,9 @@ struct super_block {
 
 	/* Being remounted read-only */
 	int s_readonly_remount;
+
+	/* per-sb errseq_t for reporting writeback errors via syncfs */
+	errseq_t s_wb_err;
 
 	/* AIO completions deferred from interrupt context */
 	struct workqueue_struct *s_dio_done_wq;
@@ -1810,6 +1815,9 @@ struct fiemap_extent_info {
 	struct fiemap_extent __user *fi_extents_start; /* Start of
 							fiemap_extent array */
 };
+
+int fiemap_prep(struct inode *inode, struct fiemap_extent_info *fieinfo,
+		u64 start, u64 *len, u32 supported_flags);
 int fiemap_fill_next_extent(struct fiemap_extent_info *info, u64 logical,
 			    u64 phys, u64 len, u32 flags);
 int fiemap_check_flags(struct fiemap_extent_info *fieinfo, u32 fs_flags);
@@ -2665,6 +2673,7 @@ extern void bdput(struct block_device *);
 extern void invalidate_bdev(struct block_device *);
 extern void iterate_bdevs(void (*)(struct block_device *, void *), void *);
 extern int sync_blockdev(struct block_device *bdev);
+extern int sync_blockdev_range(struct block_device *bdev, loff_t lstart, loff_t lend);
 extern void kill_bdev(struct block_device *);
 extern struct super_block *freeze_bdev(struct block_device *);
 extern void emergency_thaw_all(void);
@@ -2903,6 +2912,18 @@ static inline errseq_t filemap_sample_wb_err(struct address_space *mapping)
 	return errseq_sample(&mapping->wb_err);
 }
 
+/**
+ * file_sample_sb_err - sample the current errseq_t to test for later errors
+ * @mapping: mapping to be sampled
+ *
+ * Grab the most current superblock-level errseq_t value for the given
+ * struct file.
+ */
+static inline errseq_t file_sample_sb_err(struct file *file)
+{
+	return errseq_sample(&file->f_path.dentry->d_sb->s_wb_err);
+}
+
 static inline int filemap_nr_thps(struct address_space *mapping)
 {
 #ifdef CONFIG_READ_ONLY_THP_FOR_FS
@@ -2957,9 +2978,16 @@ static inline ssize_t generic_write_sync(struct kiocb *iocb, ssize_t count)
 
 extern void emergency_sync(void);
 extern void emergency_remount(void);
+
 #ifdef CONFIG_BLOCK
-extern sector_t bmap(struct inode *, sector_t);
+extern int bmap(struct inode *inode, sector_t *block);
+#else
+static inline int bmap(struct inode *inode,  sector_t *block)
+{
+	return -EINVAL;
+}
 #endif
+
 extern int notify_change(struct dentry *, struct iattr *, struct inode **);
 extern int inode_permission(struct inode *, int);
 extern int generic_permission(struct inode *, int);
@@ -3432,19 +3460,7 @@ extern int generic_file_fsync(struct file *, loff_t, loff_t, int);
 
 extern int generic_check_addressable(unsigned, u64);
 
-#ifdef CONFIG_UNICODE
-extern int generic_ci_d_hash(const struct dentry *dentry, struct qstr *str);
-extern int generic_ci_d_compare(const struct dentry *dentry, unsigned int len,
-				const char *str, const struct qstr *name);
-extern bool needs_casefold(const struct inode *dir);
-#else
-static inline bool needs_casefold(const struct inode *dir)
-{
-	return 0;
-}
-#endif
-extern void generic_set_encrypted_ci_d_ops(struct inode *dir,
-					   struct dentry *dentry);
+extern void generic_set_encrypted_ci_d_ops(struct dentry *dentry);
 
 #ifdef CONFIG_MIGRATION
 extern int buffer_migrate_page(struct address_space *,

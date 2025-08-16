@@ -83,6 +83,9 @@ struct msm_gem_vma;
 
 #define TEARDOWN_DEADLOCK_RETRY_MAX 5
 
+extern atomic_t resume_pending;
+extern wait_queue_head_t resume_wait_q;
+
 struct msm_file_private {
 	rwlock_t queuelock;
 	struct list_head submitqueues;
@@ -176,6 +179,8 @@ enum msm_mdp_crtc_property {
 	CRTC_PROP_IDLE_PC_STATE,
 	CRTC_PROP_CACHE_STATE,
 	CRTC_PROP_VM_REQ_STATE,
+
+	CRCT_PROP_MI_FOD_SYNC_INFO,
 
 	/* total # of properties */
 	CRTC_PROP_COUNT
@@ -972,8 +977,6 @@ void __msm_fence_worker(struct work_struct *work);
 struct drm_atomic_state *msm_atomic_state_alloc(struct drm_device *dev);
 void msm_atomic_state_clear(struct drm_atomic_state *state);
 void msm_atomic_state_free(struct drm_atomic_state *state);
-
-void msm_atomic_flush_display_threads(struct msm_drm_private *priv);
 
 int msm_gem_init_vma(struct msm_gem_address_space *aspace,
 		struct msm_gem_vma *vma, int npages);

@@ -606,7 +606,6 @@ static int tsl2772_read_prox_diodes(struct tsl2772_chip *chip)
 			return -EINVAL;
 		}
 	}
-	chip->settings.prox_diode = prox_diode_mask;
 
 	return 0;
 }

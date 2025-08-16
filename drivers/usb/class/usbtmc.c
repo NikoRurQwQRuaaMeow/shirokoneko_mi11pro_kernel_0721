@@ -1898,8 +1898,6 @@ static int usbtmc_ioctl_request(struct usbtmc_device_data *data,
 
 	if (request.req.wLength > USBTMC_BUFSIZE)
 		return -EMSGSIZE;
-	if (request.req.wLength == 0)	/* Length-0 requests are never IN */
-		request.req.bRequestType &= ~USB_DIR_IN;
 
 	is_in = request.req.bRequestType & USB_DIR_IN;
 
@@ -2226,9 +2224,7 @@ static const struct file_operations fops = {
 	.release	= usbtmc_release,
 	.flush		= usbtmc_flush,
 	.unlocked_ioctl	= usbtmc_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl	= usbtmc_ioctl,
-#endif
+	.compat_ioctl	= compat_ptr_ioctl,
 	.fasync         = usbtmc_fasync,
 	.poll           = usbtmc_poll,
 	.llseek		= default_llseek,

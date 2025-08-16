@@ -270,16 +270,14 @@ static struct cls_fl_filter *fl_lookup_range(struct fl_flow_mask *mask,
 	return NULL;
 }
 
-static noinline_for_stack
-struct cls_fl_filter *fl_mask_lookup(struct fl_flow_mask *mask, struct fl_flow_key *key)
+static struct cls_fl_filter *fl_lookup(struct fl_flow_mask *mask,
+				       struct fl_flow_key *mkey,
+				       struct fl_flow_key *key)
 {
-	struct fl_flow_key mkey;
-
-	fl_set_masked_key(&mkey, key, mask);
 	if ((mask->flags & TCA_FLOWER_MASK_FLAGS_RANGE))
-		return fl_lookup_range(mask, &mkey, key);
+		return fl_lookup_range(mask, mkey, key);
 
-	return __fl_lookup(mask, &mkey);
+	return __fl_lookup(mask, mkey);
 }
 
 static u16 fl_ct_info_to_flower_map[] = {
@@ -299,6 +297,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		       struct tcf_result *res)
 {
 	struct cls_fl_head *head = rcu_dereference_bh(tp->root);
+	struct fl_flow_key skb_mkey;
 	struct fl_flow_key skb_key;
 	struct fl_flow_mask *mask;
 	struct cls_fl_filter *f;
@@ -318,7 +317,9 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 				    ARRAY_SIZE(fl_ct_info_to_flower_map));
 		skb_flow_dissect(skb, &mask->dissector, &skb_key, 0);
 
-		f = fl_mask_lookup(mask, &skb_key);
+		fl_set_masked_key(&skb_mkey, &skb_key, mask);
+
+		f = fl_lookup(mask, &skb_mkey, &skb_key);
 		if (f && !tc_skip_sw(f->flags)) {
 			*res = f->res;
 			return tcf_exts_exec(skb, &f->exts, res);
@@ -719,8 +720,7 @@ static void fl_set_key_val(struct nlattr **tb,
 }
 
 static int fl_set_key_port_range(struct nlattr **tb, struct fl_flow_key *key,
-				 struct fl_flow_key *mask,
-				 struct netlink_ext_ack *extack)
+				 struct fl_flow_key *mask)
 {
 	fl_set_key_val(tb, &key->tp_range.tp_min.dst,
 		       TCA_FLOWER_KEY_PORT_DST_MIN, &mask->tp_range.tp_min.dst,
@@ -735,32 +735,13 @@ static int fl_set_key_port_range(struct nlattr **tb, struct fl_flow_key *key,
 		       TCA_FLOWER_KEY_PORT_SRC_MAX, &mask->tp_range.tp_max.src,
 		       TCA_FLOWER_UNSPEC, sizeof(key->tp_range.tp_max.src));
 
-	if (mask->tp_range.tp_min.dst != mask->tp_range.tp_max.dst) {
-		NL_SET_ERR_MSG(extack,
-			       "Both min and max destination ports must be specified");
+	if ((mask->tp_range.tp_min.dst && mask->tp_range.tp_max.dst &&
+	     htons(key->tp_range.tp_max.dst) <=
+		 htons(key->tp_range.tp_min.dst)) ||
+	    (mask->tp_range.tp_min.src && mask->tp_range.tp_max.src &&
+	     htons(key->tp_range.tp_max.src) <=
+		 htons(key->tp_range.tp_min.src)))
 		return -EINVAL;
-	}
-	if (mask->tp_range.tp_min.src != mask->tp_range.tp_max.src) {
-		NL_SET_ERR_MSG(extack,
-			       "Both min and max source ports must be specified");
-		return -EINVAL;
-	}
-	if (mask->tp_range.tp_min.dst && mask->tp_range.tp_max.dst &&
-	    htons(key->tp_range.tp_max.dst) <=
-	    htons(key->tp_range.tp_min.dst)) {
-		NL_SET_ERR_MSG_ATTR(extack,
-				    tb[TCA_FLOWER_KEY_PORT_DST_MIN],
-				    "Invalid destination port range (min must be strictly smaller than max)");
-		return -EINVAL;
-	}
-	if (mask->tp_range.tp_min.src && mask->tp_range.tp_max.src &&
-	    htons(key->tp_range.tp_max.src) <=
-	    htons(key->tp_range.tp_min.src)) {
-		NL_SET_ERR_MSG_ATTR(extack,
-				    tb[TCA_FLOWER_KEY_PORT_SRC_MIN],
-				    "Invalid source port range (min must be strictly smaller than max)");
-		return -EINVAL;
-	}
 
 	return 0;
 }
@@ -888,9 +869,6 @@ static int fl_set_geneve_opt(const struct nlattr *nla, struct fl_flow_key *key,
 
 	if (option_len > sizeof(struct geneve_opt))
 		data_len = option_len - sizeof(struct geneve_opt);
-
-	if (key->enc_opts.len > FLOW_DIS_TUN_OPTS_MAX - 4)
-		return -ERANGE;
 
 	opt = (struct geneve_opt *)&key->enc_opts.data[key->enc_opts.len];
 	memset(opt, 0xff, option_len);
@@ -1231,7 +1209,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 	if (key->basic.ip_proto == IPPROTO_TCP ||
 	    key->basic.ip_proto == IPPROTO_UDP ||
 	    key->basic.ip_proto == IPPROTO_SCTP) {
-		ret = fl_set_key_port_range(tb, key, mask, extack);
+		ret = fl_set_key_port_range(tb, key, mask);
 		if (ret)
 			return ret;
 	}

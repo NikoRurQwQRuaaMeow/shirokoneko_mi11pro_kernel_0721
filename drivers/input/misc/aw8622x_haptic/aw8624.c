@@ -150,7 +150,7 @@ static char aw8624_rtp_name[][AW8624_RTP_NAME_MAX] = {
 	{"NFC_card_rtp.bin"},
 	{"wakeup_voice_assistant_rtp.bin"},
 	{"NFC_card_slow_rtp.bin"},
-	{"POCO_RTP.bin"},	//99
+	{"aw8624_rtp.bin"},	//99
 	{"aw8624_rtp.bin"},	//100
 	{"offline_countdown_RTP.bin"},
 	{"scene_bomb_injury_RTP.bin"},
@@ -2539,7 +2539,7 @@ int aw8624_parse_dt(struct device *dev, struct aw8624 *aw8624,
 	unsigned int val = 0;
 	unsigned int f0_trace_parameter[4];
 	unsigned int bemf_config[4];
-	unsigned int rtp_time[194];
+	unsigned int rtp_time[175];
 	//unsigned int trig_config[15];
 	struct qti_hap_config *config = &aw8624->config;
 	struct device_node *child_node;
@@ -2811,7 +2811,7 @@ int aw8624_parse_dt(struct device *dev, struct aw8624 *aw8624,
 			printk
 			    ("%s:       aw8624->info.trig_config[%d][%d]: %d\n", __func__,
 			     i, j, aw8624->info.trig_config[i][j]);
-	for (i = 0; i < ARRAY_SIZE(aw8624->info.rtp_time); i++)
+	for (i = 0; i < 175; i++)
 		printk("%s:       aw8624->info.rtp_time[%d]: %d\n", __func__,
 		       i, aw8624->info.rtp_time[i]);
 	printk("%s:       aw8624->info.parameter1: 0x%x\n", __func__,
@@ -2944,9 +2944,9 @@ int aw8624_haptics_upload_effect(struct input_dev *dev,
 			     __func__, aw8624->effect_id,
 			     aw8624->activate_mode);
 			data[1] = aw8624->info.rtp_time[aw8624->effect_id] / 1000;	/*second data */
-			data[2] = aw8624->info.rtp_time[aw8624->effect_id] % 1000;	/*millisecond data */
-			pr_debug("%s: data[1] = %d data[2] = %d, rtp_time %d\n", __func__,
-				 data[1], data[2], aw8624->info.rtp_time[aw8624->effect_id]);
+			data[2] = aw8624->info.rtp_time[aw8624->effect_id];	/*millisecond data */
+			pr_debug("%s: data[1] = %d data[2] = %d\n", __func__,
+				 data[1], data[2]);
 		}
 
 		if (copy_to_user(effect->u.periodic.custom_data, data,

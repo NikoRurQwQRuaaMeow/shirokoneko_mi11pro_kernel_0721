@@ -1655,7 +1655,7 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 
 	dev_dbg(&pdev->dev, "Probed Qualcomm pinctrl driver\n");
 
-#ifdef CONFIG_PINCTRL_REDWOOD
+#if IS_ENABLED(CONFIG_PINCTRL_REDWOOD)
 	// disable unused gpios for gic stuck
 	pr_err("Disable all unused GPIO  wakeup\n");
 	msm_gpio_mpm_wake_set(20, false);
