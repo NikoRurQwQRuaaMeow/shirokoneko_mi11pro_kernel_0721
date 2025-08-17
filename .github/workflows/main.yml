@@ -67,25 +67,18 @@ jobs:
 
           lscpu
           neofetch
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/android-11.0.0_r3/clang-r383902b.tar.gz
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
           mkdir -p aosp-clang
-          tar -xzf clang-r383902b.tar.gz -C aosp-clang
-          rm clang-r383902b.tar.gz
+          tar -xzf clang-r547379.tar.gz -C aosp-clang
+          rm clang-r547379.tar.gz
           echo "AOSP_CLANG_PATH=$(pwd)/aosp-clang" >> $GITHUB_ENV
           echo "PATH=$(pwd)/aosp-clang/bin:$PATH" >> $GITHUB_ENV
 
       - name: 初始化源码仓库
         run: |
           rm -rf kernel_workspace && mkdir kernel_workspace && cd kernel_workspace
-          git clone --depth=1 https://github.com/NikoRurQwQRuaaMeow/shirokoneko_mi11pro_kernel_0721.git -b shiroko-mars common
+          git clone --depth=1 https://github.com/NikoRurQwQRuaaMeow/shirokoneko_mi11pro_kernel_0721.git -b shiroko-mars-ksu common
           rm common/android/abi_gki_protected_exports_* || true
-          for f in common/scripts/setlocalversion; do
-            sed -i 's/ -dirty//g' "$f"
-            sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
-          done
-          sed -i 's/ERR_get_error_all(&err_state)/ERR_get_error()/g' common/scripts/extract-cert.c
-          sed -i 's/ERR_STATE_file(err_state)/"unknown"/g' common/scripts/extract-cert.c
-          sed -i 's/ERR_STATE_line(err_state)/0/g' common/scripts/extract-cert.c
       
       - name: 添加 SukiSU-Ultra
         id: ksu_version
@@ -103,12 +96,12 @@ jobs:
         run: |
           cd kernel_workspace
           cd common
-          echo "CONFIG_KALLSYMS=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KALLSYMS_ALL=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KPROBES=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_HAVE_KPROBES=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KALLSYMS=y" >> ./arch/arm64/configs/star_defconfig
+          echo "CONFIG_KALLSYMS_ALL=y" >> ./arch/arm64/configs/star_defconfig
+          echo "CONFIG_KPROBES=y" >> ./arch/arm64/configs/star_defconfig
+          echo "CONFIG_HAVE_KPROBES=y" >> ./arch/arm64/configs/star_defconfig
+          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/star_defconfig
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./arch/arm64/configs/star_defconfig
           sed -i 's/check_defconfig//' ./build.config.gki
       
       - name: 添加制作名称
@@ -116,12 +109,8 @@ jobs:
           cd kernel_workspace
           cd common
           if [[ -n "${{ github.event.inputs.kernel_suffix }}" ]]; then
-            for f in ./scripts/setlocalversion; do
-              sed -i "\$s|echo \"\\\$res\"|echo \"-${{ github.event.inputs.kernel_suffix }}\"|" "$f"
-            done
-          else
-            for f in ./scripts/setlocalversion; do
-              sed -i "\$s|echo \"\\\$res\"|echo \"-${{ env.KERNEL_NAME }}\"|" "$f"
+            for f in ./arch/arm64/configs/star_defconfig; do
+              sed -i "s/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=\"-${{ github.event.inputs.kernel_suffix }}\"/" "$f"
             done
           fi
       
@@ -139,7 +128,10 @@ jobs:
           export LLVM=1
           export LLVM_IAS=0
           export KCFLAGS="-Wno-error -Wno-deprecated-declarations"
-          make LLVM=1 LLVM_IAS=1 ARCH=arm64 CC="clang" O=out gki_defconfig
+          export KBUILD_BUILD_VERSION="0"
+          export SOURCE_DATE_EPOCH=$(date +%s)
+          make LLVM=1 LLVM_IAS=1 ARCH=arm64 CC="clang" BUILD_CONFIG=build.config.gki.aarch64 O=out DEPMOD=depmod star_defconfig && \
+          scripts/config --file out/.config -e LTO_CLANG -d LTO_NONE -e LTO_CLANG_THIN -d LTO_CLANG_FULL -e THINLTO && \
           make -j24 O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
       
       - name: 克隆 AnyKernel3 并打包
