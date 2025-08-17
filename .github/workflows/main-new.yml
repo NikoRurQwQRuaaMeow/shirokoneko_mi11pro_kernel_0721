@@ -113,12 +113,8 @@ jobs:
           cd kernel_workspace
           cd common
           if [[ -n "${{ github.event.inputs.kernel_suffix }}" ]]; then
-            for f in ./scripts/setlocalversion; do
-              sed -i "\$s|echo \"\\\$res\"|echo \"-${{ github.event.inputs.kernel_suffix }}\"|" "$f"
-            done
-          else
-            for f in ./scripts/setlocalversion; do
-              sed -i "\$s|echo \"\\\$res\"|echo \"-${{ env.KERNEL_NAME }}\"|" "$f"
+            for f in ./arch/arm64/configs/star_defconfig; do
+              sed -i 's|^\(CONFIG_LOCALVERSION=.*\)|\\1-${{ github.event.inputs.kernel_suffix }}|' "$f"
             done
           fi
       
@@ -136,6 +132,8 @@ jobs:
           export LLVM=1
           export LLVM_IAS=0
           export KCFLAGS="-Wno-error -Wno-deprecated-declarations"
+          export KBUILD_BUILD_VERSION="0"
+          export SOURCE_DATE_EPOCH=$(date +%s)
           make LLVM=1 LLVM_IAS=1 ARCH=arm64 CC="clang" BUILD_CONFIG=build.config.gki.aarch64 O=out DEPMOD=depmod star_defconfig && \
           scripts/config --file out/.config -e LTO_CLANG -d LTO_NONE -e LTO_CLANG_THIN -d LTO_CLANG_FULL -e THINLTO && \
           make -j24 O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
